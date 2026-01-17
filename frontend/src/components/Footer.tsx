@@ -10,7 +10,7 @@ export function Footer() {
                 <div className={styles.footerBrand}>
                     <div className={styles.footerLogo}>
                         <BookOpen size={20} />
-                        Eureka Brief
+                        The Eureka Feed
                     </div>
                     <p className={styles.footerTagline}>
                         Cutting-edge research, distilled into digestible insights.
@@ -36,7 +36,7 @@ export function Footer() {
 
             <div className={styles.footerBottom}>
                 <p className={styles.copyright}>
-                    © {currentYear} Eureka Brief. All rights reserved.
+                    © {currentYear} The Eureka Feed. All rights reserved.
                 </p>
                 <div className={styles.socials}>
                     <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">

@@ -71,4 +71,4 @@ app = create_application()
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Eureka Brief API", "status": "running"}
+    return {"message": "Welcome to The Eureka Feed API", "status": "running"}

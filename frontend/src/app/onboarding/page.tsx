@@ -66,7 +66,7 @@ export default function OnboardingPage() {
                 <div className={styles.header}>
                     <Link href="/" className={styles.logo}>
                         <BookOpen size={24} />
-                        Eureka Brief
+                        The Eureka Feed
                     </Link>
                     <h1>What interests you?</h1>
                     <p>Select the topics you want to follow. You can change these anytime.</p>

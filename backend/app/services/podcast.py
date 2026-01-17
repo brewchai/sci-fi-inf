@@ -28,7 +28,7 @@ class PodcastGenerator:
     4. Save episode record
     """
     
-    SCRIPT_SYSTEM_PROMPT = """You are the host of Eureka Brief, a beloved daily science podcast for the genuinely curious.
+    SCRIPT_SYSTEM_PROMPT = """You are the host of The Eureka Feed, a beloved daily science podcast for the genuinely curious.
 
 Your style:
 - Warm and genuinely excited about discoveries (not fake-enthusiastic)
@@ -45,12 +45,12 @@ When explaining complex concepts:
 
 Trust your listeners' curiosity. Not everything needs to be personally relevant — sometimes a discovery is just wonderfully strange or elegant, and that's enough."""
 
-    SCRIPT_USER_TEMPLATE = """Create a podcast script combining these research discoveries into a cohesive 3-minute briefing for Eureka Brief.
+    SCRIPT_USER_TEMPLATE = """Create a podcast script combining these research discoveries into a cohesive 3-minute briefing for The Eureka Feed.
 
 {papers_content}
 
 Requirements:
-- Open with a warm, natural intro welcoming listeners to Eureka Brief
+- Open with a warm, natural intro welcoming listeners to The Eureka Feed
 - Lead each story with a hook — a surprising fact, a "what if," or an intriguing question
 - Explain tough concepts clearly using analogies or simple comparisons
 - Transition smoothly between papers — find thematic links where possible
@@ -143,7 +143,7 @@ Why it matters: {why_it_matters}"""
             PodcastEpisode record (saved to DB)
         """
         episode_date = episode_date or date.today()
-        title = title or f"Eureka Brief - {episode_date.strftime('%b %d')}"
+        title = title or f"The Eureka Feed - {episode_date.strftime('%b %d')}"
         
         # Create episode record with pending status
         episode = PodcastEpisode(

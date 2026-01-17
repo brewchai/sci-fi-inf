@@ -1,5 +1,5 @@
 """
-APScheduler configuration for Eureka Brief cron jobs.
+APScheduler configuration for The Eureka Feed cron jobs.
 
 Two scheduled jobs:
 1. Curation: Runs at 4:00 AM UTC daily

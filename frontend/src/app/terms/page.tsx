@@ -5,8 +5,8 @@ import { Footer } from '@/components/Footer';
 import styles from '../privacy/page.module.css';
 
 export const metadata = {
-    title: 'Terms of Service | Eureka Brief',
-    description: 'Terms of Service for Eureka Brief',
+    title: 'Terms of Service | The Eureka Feed',
+    description: 'Terms of Service for The Eureka Feed',
 };
 
 export default function TermsPage() {
@@ -25,7 +25,7 @@ export default function TermsPage() {
                     <section className={styles.section}>
                         <h2>1. Acceptance of Terms</h2>
                         <p>
-                            By accessing or using Eureka Brief, you agree to be bound by these
+                            By accessing or using The Eureka Feed, you agree to be bound by these
                             Terms of Service. If you do not agree, please do not use our service.
                         </p>
                     </section>
@@ -33,7 +33,7 @@ export default function TermsPage() {
                     <section className={styles.section}>
                         <h2>2. Description of Service</h2>
                         <p>
-                            Eureka Brief provides daily curated summaries and podcasts of
+                            The Eureka Feed provides daily curated summaries and podcasts of
                             academic research. We aggregate publicly available research papers
                             and present them in accessible formats for general audiences.
                         </p>
@@ -60,7 +60,7 @@ export default function TermsPage() {
                     <section className={styles.section}>
                         <h2>5. Intellectual Property</h2>
                         <p>
-                            The content, organization, and design of Eureka Brief are protected
+                            The content, organization, and design of The Eureka Feed are protected
                             by copyright. Summaries and podcasts are our original works.
                             Research papers summarized remain the property of their respective
                             authors and publishers.
@@ -70,7 +70,7 @@ export default function TermsPage() {
                     <section className={styles.section}>
                         <h2>6. Disclaimer</h2>
                         <p>
-                            Eureka Brief provides summaries for informational purposes only.
+                            The Eureka Feed provides summaries for informational purposes only.
                             We are not responsible for the accuracy of the underlying research.
                             Our summaries should not be used as a substitute for professional
                             advice in any field.
@@ -80,7 +80,7 @@ export default function TermsPage() {
                     <section className={styles.section}>
                         <h2>7. Limitation of Liability</h2>
                         <p>
-                            To the maximum extent permitted by law, Eureka Brief shall not be
+                            To the maximum extent permitted by law, The Eureka Feed shall not be
                             liable for any indirect, incidental, or consequential damages
                             arising from your use of the service.
                         </p>

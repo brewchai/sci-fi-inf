@@ -45,9 +45,9 @@ const features = [
 
 // Latest episode content - update this when deploying new episodes
 const LATEST_EPISODE = {
-    title: "Eureka Brief — Jan 16, 2026",
+    title: "The Eureka Feed — Jan 16, 2026",
     audioSrc: "/audio/latest-episode.mp3",
-    transcript: `Welcome back to Eureka Brief, where we dive into the latest discoveries that spark curiosity and wonder! Today, we're exploring the intricate dance of neurons in our brains, the quest for inclusive education in the Philippines, and the potential impacts of climate interventions on our oceans. Let's jump right in!
+    transcript: `Welcome back to The Eureka Feed, where we dive into the latest discoveries that spark curiosity and wonder! Today, we're exploring the intricate dance of neurons in our brains, the quest for inclusive education in the Philippines, and the potential impacts of climate interventions on our oceans. Let's jump right in!
 
 What if I told you that not every neuron in your brain shows the same markers of health? A recent study focused on a special marker called NeuN, which helps scientists identify neurons—the star players in our brain's communication network. Here's the twist: while NeuN is a handy tool, it doesn't tell the whole story. Imagine a movie where some actors wear costumes that don't quite fit their roles. Just because a neuron doesn't express NeuN doesn't mean it's not doing its job! Certain important neurons, especially those tied to our sense of smell, can look like they're off the clock, but they're very much alive. Researchers found that after brain injuries, NeuN levels can dip temporarily, making it tricky to assess neuron health. This means doctors need to expand their toolkit beyond just NeuN to get a full picture of brain health—crucial for tackling conditions like Alzheimer's. So, what's the takeaway? A deeper understanding of neuron health could lead to better treatments and outcomes for people facing brain diseases.
 
@@ -55,7 +55,7 @@ Now, let's shift gears and head over to the world of education in the Philippine
 
 Finally, let's dive into our oceans, where rising temperatures due to climate change are sending out alarm bells. Scientists are exploring climate interventions, like sucking carbon dioxide out of the air—think of it as a vacuum cleaner for our atmosphere—or reflecting sunlight away from Earth. These methods could help cool the planet, but here's the catch: they might unintentionally harm marine life. It's like trying to cure one ailment but inadvertently causing another. The researchers reviewed various proposals and found that while some could benefit our oceans, others could pose risks to fish and underwater ecosystems. The delicate balance of marine life means we need to tread carefully. Understanding how these interventions will affect our oceans is crucial, as our underwater ecosystems are vital for food supply and environmental balance.
 
-So, there you have it! From the complexities of brain health to the importance of inclusive education and the future of our oceans amid climate change, each discovery invites us to learn more and to care deeper. As we continue to explore the wonders of science, remember: curiosity is the spark that ignites understanding. What will we uncover next? Stay tuned for more intriguing discoveries on Eureka Brief!`,
+So, there you have it! From the complexities of brain health to the importance of inclusive education and the future of our oceans amid climate change, each discovery invites us to learn more and to care deeper. As we continue to explore the wonders of science, remember: curiosity is the spark that ignites understanding. What will we uncover next? Stay tuned for more intriguing discoveries on The Eureka Feed!`,
     papers: [
         {
             title: "NeuN expression in health and disease: A histological perspective on neuronal heterogeneity",
@@ -306,7 +306,7 @@ export default function LandingPage() {
                         </p>
                         <p>
                             <strong style={{ color: 'var(--text-primary)' }}>
-                                Eureka Brief is for curious minds who want to understand
+                                The Eureka Feed is for curious minds who want to understand
                                 the world through the lens of evidence.
                             </strong>
                         </p>

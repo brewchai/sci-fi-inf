@@ -5,8 +5,8 @@ import { Footer } from '@/components/Footer';
 import styles from './page.module.css';
 
 export const metadata = {
-    title: 'Privacy Policy | Eureka Brief',
-    description: 'Privacy Policy for Eureka Brief',
+    title: 'Privacy Policy | The Eureka Feed',
+    description: 'Privacy Policy for The Eureka Feed',
 };
 
 export default function PrivacyPage() {
@@ -25,7 +25,7 @@ export default function PrivacyPage() {
                     <section className={styles.section}>
                         <h2>What We Collect</h2>
                         <p>
-                            When you use Eureka Brief, we collect minimal information necessary
+                            When you use The Eureka Feed, we collect minimal information necessary
                             to provide our service:
                         </p>
                         <ul>
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
 
                     <section className={styles.section}>
                         <h2>Third-Party Services</h2>
-                        <p>We use the following services to operate Eureka Brief:</p>
+                        <p>We use the following services to operate The Eureka Feed:</p>
                         <ul>
                             <li><strong>Supabase</strong> — Database and authentication</li>
                             <li><strong>OpenAI</strong> — Content generation (no personal data is sent)</li>

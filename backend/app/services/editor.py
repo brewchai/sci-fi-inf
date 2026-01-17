@@ -53,7 +53,7 @@ class EditorEngine:
         elif citations > 50:
             impact_note = f"This paper has been cited {citations} times."
 
-        system_prompt = """You are a science writer for Eureka Brief, explaining research to curious people who have NO science background.
+        system_prompt = """You are a science writer for The Eureka Feed, explaining research to curious people who have NO science background.
 
 Your goal is to make complex research EASY TO UNDERSTAND, like explaining to a smart 10-year-old.
 

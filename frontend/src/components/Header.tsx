@@ -10,7 +10,7 @@ export function Header() {
                     <span className={styles.logoIcon}>
                         <BookOpen size={18} />
                     </span>
-                    Eureka Brief
+                    The Eureka Feed
                 </Link>
 
                 <nav className={styles.nav}>

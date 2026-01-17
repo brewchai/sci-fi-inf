@@ -46,7 +46,7 @@ function LoginForm() {
                 <div className={styles.loginCard}>
                     <Link href="/" className={styles.loginLogo}>
                         <BookOpen size={24} />
-                        Eureka Brief
+                        The Eureka Feed
                     </Link>
 
                     <div className={styles.successMessage}>
@@ -75,7 +75,7 @@ function LoginForm() {
             <div className={styles.loginCard}>
                 <Link href="/" className={styles.loginLogo}>
                     <BookOpen size={24} />
-                    Eureka Brief
+                    The Eureka Feed
                 </Link>
 
                 <h1 className={styles.loginTitle}>
