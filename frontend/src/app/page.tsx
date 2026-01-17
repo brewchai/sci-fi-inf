@@ -18,6 +18,7 @@ import {
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { AudioPlayer } from '@/components/AudioPlayer';
+import { API_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 const categories = [
@@ -131,7 +132,7 @@ export default function LandingPage() {
         setWaitlistStatus('loading');
 
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'} /api/v1 / waitlist`, {
+            const res = await fetch(`${API_URL}/waitlist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: waitlistEmail }),
