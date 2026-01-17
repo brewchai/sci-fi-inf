@@ -5,6 +5,7 @@ import { Send, ArrowLeft, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { API_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 export default function ContactPage() {
@@ -19,7 +20,7 @@ export default function ContactPage() {
         setErrorMessage('');
 
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/contact`, {
+            const res = await fetch(`${API_URL}/contact`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, message }),
