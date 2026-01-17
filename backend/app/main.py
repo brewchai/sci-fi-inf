@@ -19,9 +19,12 @@ async def lifespan(app: FastAPI):
     # Start the scheduler (optional - won't fail if apscheduler not installed)
     scheduler = None
     try:
-        from app.cron.scheduler import setup_scheduler
-        scheduler = setup_scheduler()
-        scheduler.start()
+        if settings.ENABLE_CRONS:
+            from app.cron.scheduler import setup_scheduler
+            scheduler = setup_scheduler()
+            scheduler.start()
+        else:
+            print("Cron jobs disabled via configuration")
     except ImportError:
         print("Warning: apscheduler not installed, cron jobs disabled")
     

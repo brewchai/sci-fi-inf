@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     
     # Admin
     ADMIN_API_KEY: str | None = None
+    ENABLE_CRONS: bool = False
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
