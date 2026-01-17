@@ -38,6 +38,7 @@ export function Footer() {
                 <p className={styles.copyright}>
                     © {currentYear} The Eureka Feed. All rights reserved.
                 </p>
+                {/* Social links - uncomment when ready
                 <div className={styles.socials}>
                     <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">
                         <Twitter size={20} />
@@ -49,6 +50,7 @@ export function Footer() {
                         <Mail size={20} />
                     </a>
                 </div>
+                */}
             </div>
         </footer>
     );
