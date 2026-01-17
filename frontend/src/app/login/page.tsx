@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { BookOpen, Mail, Check, Loader2 } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase';
 import styles from './page.module.css';
 
-export default function LoginPage() {
+function LoginForm() {
     const searchParams = useSearchParams();
     const isSignup = searchParams.get('signup') === 'true';
     const plan = searchParams.get('plan') || 'monthly';
@@ -130,5 +130,13 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className={styles.loginPage}><Loader2 className="spin" /></div>}>
+            <LoginForm />
+        </Suspense>
     );
 }
