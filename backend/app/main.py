@@ -69,6 +69,6 @@ def create_application() -> FastAPI:
 
 app = create_application()
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"message": "Welcome to The Eureka Feed API", "status": "running"}
