@@ -1,0 +1,123 @@
+.player {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg) var(--space-xl);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.playButton {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--bg-primary);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.playButton:hover {
+    transform: scale(1.05);
+    background: var(--accent-hover);
+}
+
+.playButton:active {
+    transform: scale(0.98);
+}
+
+.controls {
+    flex: 1;
+    min-width: 0;
+}
+
+.title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progressContainer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+}
+
+.progressWrapper {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progressBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
+.seekBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+}
+
+.muteButton {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    transition: color 0.15s ease;
+}
+
+.muteButton:hover {
+    color: var(--text-primary);
+}
+
+@media (max-width: 480px) {
+    .player {
+        padding: var(--space-md);
+        gap: var(--space-md);
+    }
+
+    .playButton {
+        width: 48px;
+        height: 48px;
+    }
+
+    .muteButton {
+        display: none;
+    }
+}

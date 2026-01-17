@@ -1,0 +1,140 @@
+.onboarding {
+    min-height: 100vh;
+    padding: var(--space-3xl) var(--space-lg);
+    background: var(--bg-primary);
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: var(--space-2xl);
+}
+
+.logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-decoration: none;
+    margin-bottom: var(--space-xl);
+}
+
+.logo svg {
+    color: var(--accent);
+}
+
+.header h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-sm);
+}
+
+.header p {
+    color: var(--text-muted);
+}
+
+.categoriesGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+    margin-bottom: var(--space-2xl);
+}
+
+.categoryCard {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.categoryCard:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.categoryCard.selected {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+}
+
+.checkmark {
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    width: 24px;
+    height: 24px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bg-primary);
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s ease;
+}
+
+.categoryCard.selected .checkmark {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.emoji {
+    font-size: 2rem;
+    margin-bottom: var(--space-sm);
+}
+
+.categoryCard h3 {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+}
+
+.categoryCard p {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.selectedCount {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+}
+
+.selectedCount span {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.continueBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .categoriesGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .categoriesGrid {
+        grid-template-columns: 1fr;
+    }
+}

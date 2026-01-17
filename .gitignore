@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite
+
+# Audio files (generated, large)
+*.mp3
+*.wav
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Alembic
+alembic/versions/*.pyc
+
+# Coverage
+.coverage
+htmlcov/
+
+.npm-cache

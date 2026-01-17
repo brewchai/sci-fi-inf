@@ -1,0 +1,159 @@
+.loginPage {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    background: var(--bg-primary);
+}
+
+.loginCard {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+}
+
+.loginLogo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-2xl);
+    text-decoration: none;
+}
+
+.loginLogo svg {
+    color: var(--accent);
+}
+
+.loginTitle {
+    text-align: center;
+    font-size: 1.75rem;
+    margin-bottom: var(--space-sm);
+}
+
+.loginSubtitle {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: var(--space-xl);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.inputGroup label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.inputGroup input {
+    width: 100%;
+    padding: var(--space-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    color: var(--text-primary);
+    transition: border-color 0.2s ease;
+}
+
+.inputGroup input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.inputGroup input::placeholder {
+    color: var(--text-muted);
+}
+
+.submitBtn {
+    width: 100%;
+    margin-top: var(--space-sm);
+}
+
+.submitBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin: var(--space-lg) 0;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.switchText {
+    text-align: center;
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+}
+
+.switchText a {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.successMessage {
+    text-align: center;
+    padding: var(--space-xl);
+}
+
+.successIcon {
+    width: 64px;
+    height: 64px;
+    background: rgba(74, 222, 128, 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--space-lg);
+    color: var(--success);
+}
+
+.successMessage h2 {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-md);
+}
+
+.successMessage p {
+    color: var(--text-muted);
+    margin-bottom: var(--space-lg);
+}
+
+.errorMessage {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: var(--error);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    margin-bottom: var(--space-md);
+}
