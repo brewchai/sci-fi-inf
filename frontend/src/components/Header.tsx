@@ -16,6 +16,7 @@ export function Header() {
                 <nav className={styles.nav}>
                     <a href="#how-it-works" className={styles.navLink}>How It Works</a>
                     <a href="#categories" className={styles.navLink}>Categories</a>
+                    <a href="#faq" className={styles.navLink}>FAQ</a>
                     <a href="#early-access" className={styles.navLink}>Early Access</a>
                 </nav>
 
