@@ -41,15 +41,18 @@ def create_application() -> FastAPI:
         lifespan=lifespan
     )
 
-    # CORS - always allow localhost:3000 for dev, plus any configured origins
-    origins = ["http://localhost:3000"]
-    if settings.BACKEND_CORS_ORIGINS:
-        origins.extend([str(origin) for origin in settings.BACKEND_CORS_ORIGINS])
+    # CORS - check for wildcard "*" or use specific origins
+    if "*" in settings.BACKEND_CORS_ORIGINS:
+        origins = ["*"]
+    else:
+        origins = ["http://localhost:3000"]
+        if settings.BACKEND_CORS_ORIGINS:
+            origins.extend(settings.BACKEND_CORS_ORIGINS)
     
     application.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=True,
+        allow_credentials=True if "*" not in origins else False,  # credentials not allowed with wildcard
         allow_methods=["*"],
         allow_headers=["*"],
     )
