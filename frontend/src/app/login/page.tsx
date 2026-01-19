@@ -27,7 +27,7 @@ function LoginForm() {
             const { error } = await getSupabase().auth.signInWithOtp({
                 email,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/onboarding`,
+                    emailRedirectTo: `${window.location.origin}/feed`,
                 },
             });
 

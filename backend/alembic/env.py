@@ -43,7 +43,8 @@ if db_url:
         ''   # fragment
     ))
     
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Escape % characters for ConfigParser (% is used for interpolation)
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # Set target metadata for autogenerate
 target_metadata = Base.metadata

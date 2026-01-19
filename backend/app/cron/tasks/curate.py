@@ -154,34 +154,46 @@ async def run_curation_job(dry_run: bool = False) -> dict:
     Returns:
         Dict with results per category
     """
-    logger.info("Starting daily curation job...")
+    from app.cron.tracking import track_cron_run
     
-    registry = get_category_registry()
-    categories = registry.list_active()
-    
-    # Run all harvests in parallel
-    tasks = [
-        harvest_and_curate_category(cat, dry_run=dry_run)
-        for cat in categories
-    ]
-    
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Build summary
-    summary = {}
-    for category, result in zip(categories, results):
-        if isinstance(result, Exception):
-            logger.error(f"Curation failed for {category.slug}: {result}")
-            summary[category.slug] = {"status": "error", "error": str(result)}
-        elif result is None:
-            summary[category.slug] = {"status": "no_papers"}
-        else:
-            summary[category.slug] = {"status": "ok", "stored": result}
-    
-    success_count = sum(1 for r in results if isinstance(r, int) and r > 0)
-    logger.info(f"Curation complete: {success_count}/{len(categories)} categories had new papers")
-    
-    return summary
+    async with track_cron_run("curation") as tracker:
+        logger.info("Starting daily curation job...")
+        
+        registry = get_category_registry()
+        categories = registry.list_active()
+        
+        # Run all harvests in parallel
+        tasks = [
+            harvest_and_curate_category(cat, dry_run=dry_run)
+            for cat in categories
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Build summary
+        summary = {}
+        for category, result in zip(categories, results):
+            if isinstance(result, Exception):
+                logger.error(f"Curation failed for {category.slug}: {result}")
+                summary[category.slug] = {"status": "error", "error": str(result)}
+            elif result is None:
+                summary[category.slug] = {"status": "no_papers"}
+            else:
+                summary[category.slug] = {"status": "ok", "stored": result}
+        
+        success_count = sum(1 for r in results if isinstance(r, int) and r > 0)
+        logger.info(f"Curation complete: {success_count}/{len(categories)} categories had new papers")
+        
+        tracker.set_result({
+            "categories_processed": len(categories),
+            "categories_with_papers": success_count,
+            "dry_run": dry_run,
+        })
+        
+        if dry_run:
+            tracker.set_status("dry_run")
+        
+        return summary
 
 
 # CLI entry point

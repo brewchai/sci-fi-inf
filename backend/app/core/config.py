@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     OPENALEX_MAILTO: str | None = "example@example.com" # Updated to be polite!
     OPENAI_API_KEY: str | None = None
     
+    # Supabase Storage
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    
     # Admin
     ADMIN_API_KEY: str | None = None
     ENABLE_CRONS: bool = False

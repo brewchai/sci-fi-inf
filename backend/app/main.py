@@ -9,6 +9,7 @@ from app.models.paper import Paper  # noqa: F401
 from app.models.podcast import PodcastEpisode  # noqa: F401
 from app.models.contact import ContactMessage  # noqa: F401
 from app.models.waitlist import WaitlistEmail  # noqa: F401
+from app.models.cron_run import CronRun  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,12 +58,13 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist
+    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist, cron
     application.include_router(papers.router, prefix="/api/v1/papers", tags=["papers"])
     application.include_router(podcast.router, prefix="/api/v1", tags=["podcast"])
     application.include_router(admin.router, prefix="/api/v1", tags=["admin"])
     application.include_router(contact.router, prefix="/api/v1", tags=["contact"])
     application.include_router(waitlist.router, prefix="/api/v1", tags=["waitlist"])
+    application.include_router(cron.router, prefix="/api/v1", tags=["cron"])
 
     return application
 

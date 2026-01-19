@@ -22,6 +22,23 @@ export type Paper = {
     category: string | null;
 };
 
+export type PodcastEpisode = {
+    id: number;
+    episode_date: string;
+    title: string;
+    paper_ids: number[];
+    script: string | null;
+    audio_url: string | null;
+    duration_seconds: number | null;
+    status: string;
+};
+
+export type EpisodeDate = {
+    id: number;
+    episode_date: string;
+    duration_seconds: number | null;
+};
+
 export async function fetchCategories(): Promise<Category[]> {
     const res = await fetch(`${API_URL}/papers/categories`);
     if (!res.ok) throw new Error('Failed to fetch categories');
@@ -40,5 +57,44 @@ export async function fetchLatestEdition(category?: string): Promise<Paper[]> {
 export async function fetchPaper(id: number): Promise<Paper> {
     const res = await fetch(`${API_URL}/papers/${id}`);
     if (!res.ok) throw new Error('Failed to fetch paper');
+    return res.json();
+}
+
+export async function fetchLatestPodcast(): Promise<PodcastEpisode> {
+    const res = await fetch(`${API_URL}/podcast/latest`);
+    if (!res.ok) throw new Error('Failed to fetch latest podcast');
+    return res.json();
+}
+
+export async function fetchPodcastEpisodes(limit: number = 20): Promise<PodcastEpisode[]> {
+    const res = await fetch(`${API_URL}/podcast/list?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch podcast episodes');
+    return res.json();
+}
+
+export async function fetchPapers(ids: number[]): Promise<Paper[]> {
+    const papers = await Promise.all(
+        ids.map(async (id) => {
+            try {
+                const res = await fetch(`${API_URL}/papers/${id}`);
+                if (!res.ok) return null;
+                return res.json();
+            } catch {
+                return null;
+            }
+        })
+    );
+    return papers.filter((p): p is Paper => p !== null);
+}
+
+export async function fetchEpisodeDates(limit: number = 30): Promise<EpisodeDate[]> {
+    const res = await fetch(`${API_URL}/podcast/dates?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch episode dates');
+    return res.json();
+}
+
+export async function fetchEpisodeById(id: number): Promise<PodcastEpisode> {
+    const res = await fetch(`${API_URL}/podcast/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }

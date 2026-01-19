@@ -166,6 +166,42 @@ async def get_all_papers(
     ]
 
 
+@router.get(
+    "/{paper_id}",
+    response_model=PaperDetail,
+    summary="Get a paper by ID",
+    description="Returns detailed information about a specific paper.",
+)
+async def get_paper_by_id(
+    paper_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> PaperDetail:
+    """
+    Get a specific paper by its ID.
+    
+    Args:
+        paper_id: Database ID of the paper.
+        db: Database session.
+        
+    Returns:
+        Detailed paper information.
+        
+    Raises:
+        HTTPException: If paper not found.
+    """
+    stmt = select(Paper).where(Paper.id == paper_id)
+    result = await db.execute(stmt)
+    paper = result.scalar_one_or_none()
+    
+    if paper is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paper with id {paper_id} not found",
+        )
+    
+    return _paper_to_detail(paper)
+
+
 # =============================================================================
 # Pipeline Endpoints
 # =============================================================================

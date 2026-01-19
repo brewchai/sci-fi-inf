@@ -127,39 +127,59 @@ async def run_podcast_job(dry_run: bool = False) -> dict:
     Returns:
         Dict with episode info or error
     """
-    logger.info("Starting daily podcast generation...")
+    from app.models.podcast import PodcastEpisode
+    from app.cron.tracking import track_cron_run
     
-    # Get available papers
-    papers = await get_unused_curated_papers()
-    
-    if not papers:
-        logger.warning("No unused curated papers available for podcast")
-        return {"status": "no_papers"}
-    
-    logger.info(f"Found {len(papers)} unused curated papers")
-    
-    # LLM ranks papers and selects top 10 for podcast pool
-    curator = PaperCurator()
-    curated_pool = await curator.rank_papers(papers, max_select=10)
-    logger.info(f"LLM curated pool: {len(curated_pool)} papers")
-    
-    # Select papers for this episode from curated pool
-    selected = weighted_select(curated_pool, PAPERS_PER_EPISODE)
-    logger.info(f"Selected {len(selected)} papers for episode")
-    
-    for p in selected:
-        category = p.metrics.get("category", "unknown") if p.metrics else "unknown"
-        logger.info(f"  - [{category}] {p.title[:60]}...")
-    
-    if dry_run:
-        logger.info("[DRY RUN] Would generate podcast with above papers")
-        return {"status": "dry_run", "papers": len(selected)}
-    
-    # Generate episode
-    async with get_async_session() as db:
-        generator = PodcastGenerator(db)
+    async with track_cron_run("podcast") as tracker:
+        logger.info("Starting daily podcast generation...")
         
-        try:
+        # Check if episode already exists for today (idempotent)
+        async with get_async_session() as db:
+            today = date.today()
+            stmt = select(PodcastEpisode).where(PodcastEpisode.episode_date == today)
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
+            
+            if existing:
+                logger.info(f"Episode already exists for {today} (id={existing.id}), skipping")
+                tracker.set_status("skipped")
+                tracker.set_result({"reason": "already_exists", "episode_id": existing.id})
+                return {"status": "already_exists", "episode_id": existing.id}
+        
+        # Get available papers
+        papers = await get_unused_curated_papers()
+        
+        if not papers:
+            logger.warning("No unused curated papers available for podcast")
+            tracker.set_status("no_papers")
+            tracker.set_result({"reason": "no_papers"})
+            return {"status": "no_papers"}
+        
+        logger.info(f"Found {len(papers)} unused curated papers")
+        
+        # LLM ranks papers and selects top 10 for podcast pool
+        curator = PaperCurator()
+        curated_pool = await curator.rank_papers(papers, max_select=10)
+        logger.info(f"LLM curated pool: {len(curated_pool)} papers")
+        
+        # Select papers for this episode from curated pool
+        selected = weighted_select(curated_pool, PAPERS_PER_EPISODE)
+        logger.info(f"Selected {len(selected)} papers for episode")
+        
+        for p in selected:
+            category = p.metrics.get("category", "unknown") if p.metrics else "unknown"
+            logger.info(f"  - [{category}] {p.title[:60]}...")
+        
+        if dry_run:
+            logger.info("[DRY RUN] Would generate podcast with above papers")
+            tracker.set_status("dry_run")
+            tracker.set_result({"papers": len(selected)})
+            return {"status": "dry_run", "papers": len(selected)}
+        
+        # Generate episode
+        async with get_async_session() as db:
+            generator = PodcastGenerator(db)
+            
             episode = await generator.generate_episode(
                 paper_ids=[p.id for p in selected],
                 episode_date=date.today(),
@@ -172,17 +192,15 @@ async def run_podcast_job(dry_run: bool = False) -> dict:
             
             logger.info(f"Generated episode {episode.id}: {episode.title}")
             
-            return {
+            result = {
                 "status": "ok",
                 "episode_id": episode.id,
                 "title": episode.title,
                 "papers": len(selected),
                 "audio_url": episode.audio_url,
             }
-            
-        except Exception as e:
-            logger.error(f"Failed to generate podcast: {e}")
-            return {"status": "error", "error": str(e)}
+            tracker.set_result(result)
+            return result
 
 
 # CLI entry point

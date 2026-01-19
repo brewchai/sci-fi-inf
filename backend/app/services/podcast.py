@@ -142,6 +142,8 @@ Why it matters: {why_it_matters}"""
         Returns:
             PodcastEpisode record (saved to DB)
         """
+        from app.services.storage import StorageService
+        
         episode_date = episode_date or date.today()
         title = title or f"The Eureka Feed - {episode_date.strftime('%b %d')}"
         
@@ -168,17 +170,21 @@ Why it matters: {why_it_matters}"""
             # Generate audio
             audio_bytes = await self.tts.generate_audio(script, voice=voice)
             
-            # For now, we'll store audio locally
-            # TODO: Upload to Supabase Storage
+            # Upload to Supabase Storage
             audio_filename = f"podcast_{episode.id}_{episode_date.isoformat()}.mp3"
-            audio_path = f"/tmp/{audio_filename}"
             
-            with open(audio_path, "wb") as f:
-                f.write(audio_bytes)
+            try:
+                storage = StorageService()
+                audio_url = storage.upload_audio(audio_bytes, audio_filename)
+                episode.audio_url = audio_url
+            except Exception as storage_error:
+                logger.warning(f"Failed to upload to Supabase Storage, saving locally: {storage_error}")
+                # Fallback to local storage if Supabase fails
+                audio_path = f"/tmp/{audio_filename}"
+                with open(audio_path, "wb") as f:
+                    f.write(audio_bytes)
+                episode.audio_url = audio_path
             
-            # In production, upload to storage and get URL
-            # For now, store local path
-            episode.audio_url = audio_path
             episode.duration_seconds = TTSGenerator.estimate_duration(script)
             episode.status = "ready"
             
@@ -192,3 +198,4 @@ Why it matters: {why_it_matters}"""
             raise
         
         return episode
+

@@ -1,4 +1,4 @@
-.onboarding {
+.settings {
     min-height: 100vh;
     padding: var(--space-3xl) var(--space-lg);
     background: var(--bg-primary);
@@ -49,93 +49,6 @@
     color: var(--text-muted);
 }
 
-/* Sections */
-.section {
-    margin-bottom: var(--space-2xl);
-}
-
-.sectionTitle {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: var(--space-sm);
-}
-
-.sectionTitle .optional {
-    font-weight: 400;
-    font-size: 0.875rem;
-    color: var(--text-muted);
-}
-
-.sectionTitle .required {
-    color: var(--accent);
-}
-
-.sectionSubtitle {
-    color: var(--text-muted);
-    font-size: 0.9375rem;
-    margin-bottom: var(--space-lg);
-}
-
-/* User Type Selection */
-.userTypeGrid {
-    display: flex;
-    gap: var(--space-md);
-    margin-bottom: var(--space-lg);
-    flex-wrap: wrap;
-}
-
-.userTypeCard {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-md) var(--space-lg);
-    background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: var(--radius-lg);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 0.9375rem;
-    color: var(--text-primary);
-    font-family: inherit;
-}
-
-.userTypeCard:hover {
-    background: var(--bg-card-hover);
-    border-color: rgba(255, 255, 255, 0.15);
-}
-
-.userTypeCard.selected {
-    border-color: var(--accent);
-    background: var(--accent-muted);
-}
-
-.userTypeEmoji {
-    font-size: 1.25rem;
-}
-
-/* Age Input */
-.ageInput {
-    width: 120px;
-    padding: var(--space-md) var(--space-lg);
-    background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: var(--radius-lg);
-    font-size: 1rem;
-    color: var(--text-primary);
-    font-family: inherit;
-    transition: border-color 0.2s ease;
-}
-
-.ageInput:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-
-.ageInput::placeholder {
-    color: var(--text-muted);
-}
-
-/* Categories Grid */
 .categoriesGrid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -203,24 +116,32 @@
     line-height: 1.4;
 }
 
-/* Footer */
 .footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.selectedCount {
+.backLink {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
     color: var(--text-muted);
-    font-size: 0.9375rem;
+    text-decoration: none;
 }
 
-.selectedCount span {
-    color: var(--accent);
-    font-weight: 600;
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
 }
 
-.continueBtn:disabled {
+.saveMessage {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.saveBtn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -230,13 +151,10 @@
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .userTypeGrid {
+    .footer {
         flex-direction: column;
-    }
-
-    .userTypeCard {
-        width: 100%;
-        justify-content: center;
+        gap: var(--space-md);
+        align-items: flex-start;
     }
 }
 

@@ -24,6 +24,8 @@ export { supabase };
 export type Profile = {
     id: string;
     email: string;
+    user_type: 'student' | 'professional' | 'researcher' | 'hobbyist' | null;
+    age: number | null;
     interests: string[];
     subscription_status: 'trial' | 'active' | 'canceled' | 'expired';
     created_at: string;

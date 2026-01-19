@@ -103,6 +103,58 @@ async def generate_podcast(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast: {str(e)}")
 
+class EpisodeDateResponse(BaseModel):
+    """Lightweight response with just episode ID and date."""
+    id: int
+    episode_date: date
+    duration_seconds: Optional[int]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get(
+    "/dates",
+    response_model=List[EpisodeDateResponse],
+    summary="Get episode dates for selector",
+)
+async def list_episode_dates(
+    limit: int = 30,
+    db: AsyncSession = Depends(get_db),
+) -> List[EpisodeDateResponse]:
+    """Get just episode IDs and dates for the date picker (lightweight)."""
+    result = await db.execute(
+        select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.duration_seconds)
+        .where(PodcastEpisode.status == "ready")
+        .order_by(desc(PodcastEpisode.episode_date))
+        .limit(limit)
+    )
+    rows = result.all()
+    return [
+        EpisodeDateResponse(id=row.id, episode_date=row.episode_date, duration_seconds=row.duration_seconds)
+        for row in rows
+    ]
+
+
+@router.get(
+    "/list",
+    response_model=List[PodcastEpisodeResponse],
+    summary="Get all podcast episodes",
+)
+async def list_episodes(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+) -> List[PodcastEpisodeResponse]:
+    """Get all podcast episodes, ordered by date descending."""
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.status == "ready")
+        .order_by(desc(PodcastEpisode.episode_date))
+        .limit(limit)
+    )
+    episodes = result.scalars().all()
+    return [PodcastEpisodeResponse.model_validate(ep) for ep in episodes]
+
 
 @router.get(
     "/latest",
