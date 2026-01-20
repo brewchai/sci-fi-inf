@@ -17,6 +17,7 @@ from app.db.session import get_async_session
 from app.models.paper import Paper
 from app.services.podcast import PodcastGenerator
 from app.services.curator import PaperCurator
+from app.core.config import settings
 
 
 # Category weights - higher = more likely to appear in podcast
@@ -32,8 +33,6 @@ CATEGORY_WEIGHTS = {
     "chemistry": 0.05,
     "food_agriculture": 0.05,
 }
-
-PAPERS_PER_EPISODE = 3  # 3 papers (~3-4 min podcast)
 
 
 async def get_unused_curated_papers() -> List[Paper]:
@@ -53,7 +52,9 @@ async def get_unused_curated_papers() -> List[Paper]:
         return list(papers)
 
 
-def weighted_select(papers: List[Paper], count: int = PAPERS_PER_EPISODE) -> List[Paper]:
+def weighted_select(papers: List[Paper], count: int = None) -> List[Paper]:
+    if count is None:
+        count = settings.PAPERS_PER_EPISODE
     """
     Select papers using weighted random sampling based on category popularity.
     
@@ -157,13 +158,18 @@ async def run_podcast_job(dry_run: bool = False) -> dict:
         
         logger.info(f"Found {len(papers)} unused curated papers")
         
+        # Pre-filter papers to limit LLM costs
+        if len(papers) > settings.MAX_PAPERS_FOR_RANKING:
+            logger.info(f"Pre-filtering from {len(papers)} to {settings.MAX_PAPERS_FOR_RANKING} papers for LLM ranking")
+            papers = weighted_select(papers, settings.MAX_PAPERS_FOR_RANKING)
+        
         # LLM ranks papers and selects top 10 for podcast pool
         curator = PaperCurator()
         curated_pool = await curator.rank_papers(papers, max_select=10)
         logger.info(f"LLM curated pool: {len(curated_pool)} papers")
         
         # Select papers for this episode from curated pool
-        selected = weighted_select(curated_pool, PAPERS_PER_EPISODE)
+        selected = weighted_select(curated_pool, settings.PAPERS_PER_EPISODE)
         logger.info(f"Selected {len(selected)} papers for episode")
         
         for p in selected:

@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     ADMIN_API_KEY: str | None = None
     ENABLE_CRONS: bool = False
     
+    # Podcast generation
+    PAPERS_PER_EPISODE: int = 3  # Papers included in each episode
+    MAX_PAPERS_FOR_RANKING: int = 20  # Max papers to send to LLM for ranking (cost control)
+    
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 settings = Settings()
