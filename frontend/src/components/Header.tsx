@@ -67,8 +67,7 @@ export function Header() {
                                 <a href="#categories" className={styles.navLink}>Categories</a>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
                                 <a href="#early-access" className={styles.navLink}>Early Access</a>
-                                {/* TODO: Enable when ready for public sign-in */}
-                                {/* <Link href="/login" className={styles.navLink}>Sign In</Link> */}
+                                <Link href="/login" className={styles.navLink}>Sign In</Link>
                             </>
                         )
                     )}
