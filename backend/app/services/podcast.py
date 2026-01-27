@@ -50,7 +50,7 @@ Trust your listeners' curiosity. Not everything needs to be personally relevant 
 {papers_content}
 
 Requirements:
-- Open with a warm, natural intro welcoming listeners to The Eureka Feed
+- Open with: "Welcome. You're listening to The Eureka Feed, where we bridge the gap between publication and podcast in record time." (Never say "Welcome back")
 - Lead each story with a hook — a surprising fact, a "what if," or an intriguing question
 - Explain tough concepts clearly using analogies or simple comparisons
 - Transition smoothly between papers — find thematic links where possible
