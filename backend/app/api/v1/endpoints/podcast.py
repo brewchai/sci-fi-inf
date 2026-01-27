@@ -123,9 +123,12 @@ async def list_episode_dates(
     db: AsyncSession = Depends(get_db),
 ) -> List[EpisodeDateResponse]:
     """Get just episode IDs and dates for the date picker (lightweight)."""
+    # Only show episodes from Jan 20, 2026 onwards
+    min_date = date(2026, 1, 20)
     result = await db.execute(
         select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.duration_seconds)
         .where(PodcastEpisode.status == "ready")
+        .where(PodcastEpisode.episode_date >= min_date)
         .order_by(desc(PodcastEpisode.episode_date))
         .limit(limit)
     )
@@ -146,9 +149,12 @@ async def list_episodes(
     db: AsyncSession = Depends(get_db),
 ) -> List[PodcastEpisodeResponse]:
     """Get all podcast episodes, ordered by date descending."""
+    # Only show episodes from Jan 20, 2026 onwards
+    min_date = date(2026, 1, 20)
     result = await db.execute(
         select(PodcastEpisode)
         .where(PodcastEpisode.status == "ready")
+        .where(PodcastEpisode.episode_date >= min_date)
         .order_by(desc(PodcastEpisode.episode_date))
         .limit(limit)
     )
