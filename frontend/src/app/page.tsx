@@ -5,20 +5,15 @@ import Link from 'next/link';
 import {
     Sparkles,
     Brain,
-    Zap,
-    Check,
     ArrowRight,
     Newspaper,
     Filter,
-    BookOpen,
     ChevronDown,
     ChevronUp,
-    Mail
 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { AudioPlayer } from '@/components/AudioPlayer';
-import { API_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 const categories = [
@@ -175,36 +170,6 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 }
 
 export default function LandingPage() {
-    const [waitlistEmail, setWaitlistEmail] = useState('');
-    const [waitlistStatus, setWaitlistStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-    const [waitlistMessage, setWaitlistMessage] = useState('');
-
-    const handleWaitlistSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setWaitlistStatus('loading');
-
-        try {
-            const res = await fetch(`${API_URL}/waitlist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: waitlistEmail }),
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                setWaitlistStatus('success');
-                setWaitlistMessage(data.message);
-                setWaitlistEmail('');
-            } else {
-                throw new Error(data.detail || 'Something went wrong');
-            }
-        } catch (err) {
-            setWaitlistStatus('error');
-            setWaitlistMessage(err instanceof Error ? err.message : 'Something went wrong');
-        }
-    };
-
     return (
         <>
             <Header />
@@ -225,8 +190,8 @@ export default function LandingPage() {
                             in just 3 minutes. Stay ahead without the PhD.
                         </p>
                         <div className={styles.heroActions}>
-                            <a href="#early-access" className="btn btn-primary btn-large">
-                                Get Early Access <ArrowRight size={18} />
+                            <a href="#start-listening" className="btn btn-primary btn-large">
+                                Start Listening <ArrowRight size={18} />
                             </a>
                             <a href="#how-it-works" className="btn btn-secondary btn-large">
                                 See How It Works
@@ -363,51 +328,30 @@ export default function LandingPage() {
                             </strong>
                         </p>
                         <Link href="/login?signup=true" className="btn btn-primary btn-large">
-                            Join the Brief <ArrowRight size={18} />
+                            Join The Eureka Feed — Free until Feb 5th <ArrowRight size={18} />
                         </Link>
                     </div>
                 </section>
 
-                {/* Early Access */}
-                <section className={styles.pricing} id="early-access">
+                {/* Start Listening */}
+                <section className={styles.pricing} id="start-listening">
                     <div className={styles.sectionHeader}>
-                        <h2>Get Early Access</h2>
-                        <p>Be the first to know when we launch.</p>
+                        <h2>Start Listening Today</h2>
+                        <p>Free until February 5th — no credit card required.</p>
                     </div>
 
                     <div className={styles.waitlistCard}>
-                        {waitlistStatus === 'success' ? (
-                            <div className={styles.waitlistSuccess}>
-                                <Check size={48} />
-                                <p>{waitlistMessage}</p>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleWaitlistSubmit} className={styles.waitlistForm}>
-                                <div className={styles.waitlistInputGroup}>
-                                    <Mail size={20} className={styles.waitlistIcon} />
-                                    <input
-                                        type="email"
-                                        value={waitlistEmail}
-                                        onChange={(e) => setWaitlistEmail(e.target.value)}
-                                        placeholder="Enter your email"
-                                        required
-                                        className={styles.waitlistInput}
-                                    />
-                                </div>
-                                {waitlistStatus === 'error' && (
-                                    <p className={styles.waitlistError}>{waitlistMessage}</p>
-                                )}
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary btn-large"
-                                    disabled={waitlistStatus === 'loading'}
-                                >
-                                    {waitlistStatus === 'loading' ? 'Joining...' : (
-                                        <>Get Early Access <ArrowRight size={18} /></>
-                                    )}
-                                </button>
-                            </form>
-                        )}
+                        <div className={styles.startListeningContent}>
+                            <p className={styles.freeNotice}>
+                                🎧 Create a free account and get instant access to all episodes.
+                            </p>
+                            <Link href="/login?signup=true" className="btn btn-primary btn-large">
+                                Create Account <ArrowRight size={18} />
+                            </Link>
+                            <p className={styles.signInNote}>
+                                Already have an account? <Link href="/login">Sign in</Link>
+                            </p>
+                        </div>
                     </div>
                 </section>
 

@@ -63,11 +63,10 @@ export function Header() {
                             </>
                         ) : (
                             <>
-                                <a href="#how-it-works" className={styles.navLink}>How It Works</a>
-                                <a href="#categories" className={styles.navLink}>Categories</a>
+                                <Link href="/#how-it-works" className={styles.navLink}>How It Works</Link>
+                                <Link href="/#categories" className={styles.navLink}>Categories</Link>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
-                                <a href="#early-access" className={styles.navLink}>Early Access</a>
-                                <Link href="/login" className={styles.navLink}>Sign In</Link>
+                                <Link href="/login" className={styles.navLink}>Start Listening</Link>
                             </>
                         )
                     )}

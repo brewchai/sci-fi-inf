@@ -491,6 +491,36 @@
     color: var(--text-primary);
 }
 
+/* Start Listening */
+.startListeningContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-lg);
+}
+
+.freeNotice {
+    font-size: 1.125rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.signInNote {
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.signInNote a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.signInNote a:hover {
+    text-decoration: underline;
+}
+
 /* Why Now */
 .whyNow {
     padding: var(--space-4xl) var(--space-lg);
