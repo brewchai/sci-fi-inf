@@ -179,7 +179,7 @@ export default function LandingPage() {
                     <div className={styles.heroContent}>
                         <div className={styles.heroEyebrow}>
                             <Sparkles size={16} />
-                            Launching January 2026
+                            Free until February 5th
                         </div>
                         <h1 className={styles.heroTitle}>
                             Fresh research,<br />
