@@ -50,7 +50,9 @@ Trust your listeners' curiosity. Not everything needs to be personally relevant 
 {papers_content}
 
 Requirements:
-- Open with: "Welcome. You're listening to The Eureka Feed, where we bridge the gap between publication and podcast in record time." (Never say "Welcome back")
+- ALWAYS start with this exact static introduction: "Welcome. You're listening to The Eureka Feed, where we bridge the gap between publication and podcast in record time."
+- IMMEDIATELY after the intro, add ONE sentence that teases what's coming in this episode (make it intriguing and specific to today's papers)
+- ONLY THEN dive into the papers
 - Lead each story with a hook — a surprising fact, a "what if," or an intriguing question
 - Explain tough concepts clearly using analogies or simple comparisons
 - Transition smoothly between papers — find thematic links where possible
@@ -59,9 +61,16 @@ Requirements:
 - Target length: 400-500 words (roughly 3 minutes spoken)
 
 Avoid:
+- Saying "Welcome back" (always say "Welcome")
 - Clichés like "groundbreaking," "revolutionary," or "scientists have discovered"
 - Forced personal relevance ("this could change YOUR life!")
 - Generic sign-offs
+
+Structure:
+1. Static intro sentence (required)
+2. One-sentence teaser (required)
+3. Paper content (main body)
+4. Warm closing
 
 Write the script as a single block of flowing text, ready to be read aloud."""
 
