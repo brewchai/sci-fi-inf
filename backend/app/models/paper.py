@@ -33,9 +33,20 @@ class Paper(Base):
     is_used_in_episode: Mapped[bool] = mapped_column(Boolean, default=False)
     category_slug: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
 
+    # AI Curation Fields (NEW)
+    has_full_text: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    full_text_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # 'openalex_pdf', 'arxiv', etc.
+    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, index=True)  # 0-100 quality score
+    llm_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # LLM-assigned rank (1-5)
+
     # Editorial Content (LLM Generated)
     headline: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     eli5_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     key_takeaways: Mapped[List[str]] = mapped_column(JSON, default=[])
+    
+    # Premium Content (AI Category Only)
+    deep_analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    code_walkthrough: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    practical_applications: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 

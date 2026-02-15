@@ -30,3 +30,6 @@ lxml>=5.1.0
 
 # Storage
 supabase>=2.0.0
+
+# PDF processing
+pymupdf>=1.23.0

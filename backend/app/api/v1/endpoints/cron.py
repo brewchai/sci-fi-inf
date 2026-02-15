@@ -63,6 +63,48 @@ async def trigger_podcast(background_tasks: BackgroundTasks, dry_run: bool = Fal
     }
 
 
+@router.post("/ai-curation/trigger")
+async def trigger_ai_curation(
+    background_tasks: BackgroundTasks,
+    dry_run: bool = False,
+    lookback_days: int = 2,
+    max_papers: int = 50
+):
+    """
+    Manually trigger the AI-specific curation job.
+    
+    Args:
+        dry_run: If True, don't save to DB (just test)
+        lookback_days: How many days back to search (default: 2)
+        max_papers: Max papers to fetch initially (default: 50)
+    
+    Runs in background and returns immediately.
+    """
+    from app.cron.tasks.curate_ai import curate_ai_papers
+    
+    logger.info(f"Manual AI curation trigger requested (dry_run={dry_run}, lookback={lookback_days})")
+    
+    # Run in background
+    async def run_ai_curation():
+        result = await curate_ai_papers(
+            lookback_days=lookback_days,
+            dry_run=dry_run,
+            max_papers=max_papers
+        )
+        logger.info(f"AI curation completed: {result}")
+    
+    background_tasks.add_task(run_ai_curation)
+    
+    return {
+        "status": "triggered",
+        "job": "ai_curation",
+        "dry_run": dry_run,
+        "lookback_days": lookback_days,
+        "max_papers": max_papers,
+        "message": "AI curation job started in background. Check logs for results."
+    }
+
+
 @router.get("/status")
 async def get_cron_status(limit: int = 10, job_name: Optional[str] = None):
     """

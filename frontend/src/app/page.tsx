@@ -179,7 +179,7 @@ export default function LandingPage() {
                     <div className={styles.heroContent}>
                         <div className={styles.heroEyebrow}>
                             <Sparkles size={16} />
-                            Free until February 5th
+                            Science, simplified
                         </div>
                         <h1 className={styles.heroTitle}>
                             Fresh research,<br />
@@ -328,7 +328,7 @@ export default function LandingPage() {
                             </strong>
                         </p>
                         <Link href="/login?signup=true" className="btn btn-primary btn-large">
-                            Join The Eureka Feed — Free until Feb 5th <ArrowRight size={18} />
+                            Join The Eureka Feed <ArrowRight size={18} />
                         </Link>
                     </div>
                 </section>
@@ -337,7 +337,7 @@ export default function LandingPage() {
                 <section className={styles.pricing} id="start-listening">
                     <div className={styles.sectionHeader}>
                         <h2>Start Listening Today</h2>
-                        <p>Free until February 5th — no credit card required.</p>
+                        <p>No credit card required.</p>
                     </div>
 
                     <div className={styles.waitlistCard}>

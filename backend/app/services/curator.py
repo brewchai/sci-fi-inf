@@ -22,31 +22,54 @@ class PaperCurator:
     - Storytelling: Makes a good podcast segment
     """
     
-    SYSTEM_PROMPT = """You are a science podcast producer selecting papers for a daily briefing.
+    SYSTEM_PROMPT = """You are curating AI research for a tech-savvy audience in early 2026.
 
-Your job: rank papers by how good they'd be for a general-audience podcast.
+**Current AI Landscape (2026):**
+- **Leading Models:** GPT-4o, Claude 3.5 Sonnet, Gemini 2.0 Flash, DeepSeek V3, o1 (reasoning model)
+- **Hot Topics:** AI agents, reasoning models, multimodal AI, AI safety/alignment, open-source LLMs
+- **Major Players:** OpenAI, Anthropic, Google DeepMind, Meta AI, xAI, DeepSeek, Mistral
+- **Trending:** Function calling, chain-of-thought reasoning, vision-language models, AI coding assistants
+
+Your job: rank papers by VIRAL POTENTIAL and RELEVANCE to what people care about RIGHT NOW.
+
+Prioritize papers about:
+- **LLMs & Reasoning** (GPT-4o-level models, o1-style reasoning, chain-of-thought)
+- **AI Agents** (autonomous agents, tool use, multi-step reasoning)
+- **Multimodal AI** (vision-language models, video generation, audio)
+- **AI Safety & Alignment** (RLHF, constitutional AI, interpretability, jailbreaks)
+- **Open Source** (Llama 3+, DeepSeek, Mistral, democratizing AI)
+- **Breakthrough Techniques** (new architectures, training efficiency, scaling laws)
 
 Score each paper 1-10 on:
-- CONCLUSIVE: Does it have clear findings? (Not "we studied X" but "we found that Y")
-- NOVEL: Is this genuinely surprising or new?
-- ACCESSIBLE: Can a non-scientist understand and care about this?
-- STORY: Does it make a good 1-minute podcast segment?
+- **TRENDING**: Is this about what people are discussing NOW? (agents, reasoning, multimodal)
+- **IMPACT**: Will this change how people build/use AI in 2026?
+- **ACCESSIBLE**: Can a tech-savvy person (not just researchers) understand this?
+- **VIRAL**: Would this get shared on Twitter/HN/Reddit TODAY?
 
-Be harsh. Most papers are incremental or too niche. Only high scores for truly podcast-worthy papers."""
+Be harsh. Ignore incremental improvements. Only high scores for papers that will make people say "wow, this is the future.\""""
 
-    RANKING_TEMPLATE = """Rank these papers for a science podcast. Return ONLY a JSON array of paper IDs sorted from best to worst, with scores.
+    RANKING_TEMPLATE = """Rank these AI research papers by VIRAL POTENTIAL for a tech audience.
 
 Papers:
 {papers_content}
 
-Return format (no other text):
-[
-  {{"id": <paper_id>, "score": <1-10>, "reason": "<1 sentence>"}},
-  ...
-]"""
+Prioritize:
+1. Papers about LLMs (GPT, Claude, Gemini, DeepSeek, Llama, Kimi, xAI)
+2. Breakthrough techniques that will trend on social media
+3. Papers that non-researchers can understand and get excited about
+4. Research from top labs (OpenAI, Google, Anthropic, Meta, etc.)
 
-    def __init__(self):
+Return ONLY a JSON array of paper IDs sorted from MOST to LEAST viral:
+[
+  {{"id": <paper_id>, "score": <1-10>, "reason": "<why this will trend>"}},
+  ...
+]
+
+No other text. Just valid JSON."""
+
+    def __init__(self, model: str = "gpt-4o-mini"):
         self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self.model = model
     
     def _format_papers(self, papers: List[Paper]) -> str:
         """Format papers for the LLM prompt."""
@@ -88,22 +111,41 @@ Abstract: {abstract}..."""
         
         try:
             response = await self.llm.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.model,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": self.RANKING_TEMPLATE.format(
                         papers_content=papers_content
                     )},
                 ],
-                temperature=0.3,  # Lower temp for more consistent ranking
-                max_tokens=500,
+                temperature=0.3,
+                max_tokens=1500,  # Increased for longer responses
             )
             
             result_text = response.choices[0].message.content.strip()
+            logger.debug(f"Raw LLM response: {result_text[:500]}...")
             
-            # Parse JSON response
+            # Parse JSON response - handle markdown code blocks
             import json
-            rankings = json.loads(result_text)
+            import re
+            
+            # Strip markdown code blocks if present
+            if result_text.startswith("```"):
+                # Remove ```json and ``` 
+                result_text = re.sub(r'^```(?:json)?\s*', '', result_text)
+                result_text = re.sub(r'\s*```$', '', result_text)
+            
+            # Try to parse JSON
+            try:
+                rankings = json.loads(result_text)
+            except json.JSONDecodeError:
+                # Try to extract JSON array from text
+                json_match = re.search(r'\[[\s\S]*\]', result_text)
+                if json_match:
+                    rankings = json.loads(json_match.group())
+                else:
+                    logger.warning("Could not parse LLM response as JSON")
+                    return papers[:max_select]
             
             # Map IDs to papers
             paper_map = {p.id: p for p in papers}
@@ -115,9 +157,14 @@ Abstract: {abstract}..."""
                     ranked_papers.append(paper_map[paper_id])
                     logger.info(f"  Score {item.get('score')}: {paper_map[paper_id].title[:50]}... - {item.get('reason', '')}")
             
-            logger.info(f"LLM selected {len(ranked_papers)} papers for podcast pool")
-            return ranked_papers
+            if ranked_papers:
+                logger.info(f"LLM selected {len(ranked_papers)} papers for podcast pool")
+                return ranked_papers
+            else:
+                logger.warning("No valid paper IDs in LLM response, falling back")
+                return papers[:max_select]
             
         except Exception as e:
             logger.error(f"LLM ranking failed: {e}, falling back to all papers")
             return papers[:max_select]
+
