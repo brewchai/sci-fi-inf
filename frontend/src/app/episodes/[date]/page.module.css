@@ -102,41 +102,70 @@
 
 /* CTA */
 .ctaSection {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+}
+
+.ctaCard {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: var(--space-xl);
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
-.ctaSection h2 {
-    font-size: 1.5rem;
-    margin-bottom: var(--space-sm);
+.ctaCard:first-child {
+    border-color: rgba(139, 92, 246, 0.25);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.05));
 }
 
-.ctaSection p {
+.ctaIcon {
+    color: #a78bfa;
+    margin-bottom: var(--space-md);
+}
+
+.ctaCard h3 {
+    font-size: 1.125rem;
+    margin-bottom: var(--space-xs);
+}
+
+.ctaCard p {
     color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
     margin-bottom: var(--space-lg);
+    flex: 1;
 }
 
 .ctaButton {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-md) var(--space-xl);
-    background: var(--accent);
-    color: var(--bg-primary);
+    gap: var(--space-xs);
+    padding: 10px 20px;
+    background: #8b5cf6;
+    color: white;
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 0.875rem;
     border-radius: var(--radius-md);
     text-decoration: none;
     transition: all 0.2s ease;
 }
 
 .ctaButton:hover {
-    background: var(--accent-hover);
-    color: var(--bg-primary);
+    background: #7c3aed;
+    color: white;
     transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+    .ctaSection {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Gated state for recent episodes */

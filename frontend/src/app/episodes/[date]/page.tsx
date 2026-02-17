@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, Lock, ArrowLeft } from 'lucide-react';
+import { ArrowRight, Lock, ArrowLeft, BookOpen, Headphones } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { fetchPublicEpisodeByDate } from '@/lib/api';
@@ -219,11 +219,22 @@ export default async function EpisodePage({ params }: Props) {
                     )}
 
                     <div className={styles.ctaSection}>
-                        <h2>Want today&apos;s episode?</h2>
-                        <p>Get the latest research delivered fresh every morning.</p>
-                        <Link href="/login" className={styles.ctaButton}>
-                            Start Listening <ArrowRight size={18} />
-                        </Link>
+                        <div className={styles.ctaCard}>
+                            <BookOpen size={24} className={styles.ctaIcon} />
+                            <h3>Read the source papers</h3>
+                            <p>Sign up to access the original research papers discussed in this episode, with direct links and summaries.</p>
+                            <Link href="/login" className={styles.ctaButton}>
+                                Sign Up Free <ArrowRight size={16} />
+                            </Link>
+                        </div>
+                        <div className={styles.ctaCard}>
+                            <Headphones size={24} className={styles.ctaIcon} />
+                            <h3>Get today&apos;s episode</h3>
+                            <p>Members get new episodes every morning — the latest research delivered before your first coffee.</p>
+                            <Link href="/login" className={styles.ctaButton}>
+                                Start Listening <ArrowRight size={16} />
+                            </Link>
+                        </div>
                     </div>
 
                     <Link href="/episodes" className={styles.archiveLink}>
