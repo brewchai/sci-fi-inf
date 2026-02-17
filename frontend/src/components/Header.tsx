@@ -56,6 +56,7 @@ export function Header() {
                         user ? (
                             <>
                                 <Link href="/feed" className={styles.navLink}>My Feed</Link>
+                                <Link href="/episodes" className={styles.navLink}>Episodes</Link>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
                                 <button onClick={handleSignOut} className={styles.navLink}>
                                     Sign Out
@@ -64,7 +65,7 @@ export function Header() {
                         ) : (
                             <>
                                 <Link href="/#how-it-works" className={styles.navLink}>How It Works</Link>
-                                <Link href="/#categories" className={styles.navLink}>Categories</Link>
+                                <Link href="/episodes" className={styles.navLink}>Episodes</Link>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
                                 <Link href="/login" className={styles.navLink}>Start Listening</Link>
                             </>

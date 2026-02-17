@@ -98,3 +98,26 @@ export async function fetchEpisodeById(id: number): Promise<PodcastEpisode> {
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }
+
+// Public episode types/functions (for SEO pages)
+export type PublicEpisode = {
+    id: number;
+    episode_date: string;
+    title: string;
+    script: string | null;
+    audio_url: string | null;
+    duration_seconds: number | null;
+    is_public: boolean;
+};
+
+export async function fetchPublicEpisodes(limit: number = 50): Promise<PublicEpisode[]> {
+    const res = await fetch(`${API_URL}/podcast/public?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch public episodes');
+    return res.json();
+}
+
+export async function fetchPublicEpisodeByDate(episodeDate: string): Promise<PublicEpisode> {
+    const res = await fetch(`${API_URL}/podcast/public/${episodeDate}`);
+    if (!res.ok) throw new Error('Failed to fetch episode');
+    return res.json();
+}

@@ -3,7 +3,7 @@ Podcast API endpoints.
 
 Provides endpoints for generating and retrieving podcast episodes.
 """
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -225,3 +225,98 @@ async def get_episode_by_date(
         raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
     
     return PodcastEpisodeResponse.model_validate(episode)
+
+
+# =============================================================================
+# Public Endpoints (for SEO — no auth required)
+# =============================================================================
+
+PUBLIC_CUTOFF_DAYS = 14  # Episodes older than this are publicly accessible
+
+
+class PublicEpisodeResponse(BaseModel):
+    """Public episode response — includes is_public flag for gating."""
+    id: int
+    episode_date: date
+    title: str
+    script: Optional[str]
+    audio_url: Optional[str]
+    duration_seconds: Optional[int]
+    is_public: bool
+
+    class Config:
+        from_attributes = True
+
+
+@router.get(
+    "/public",
+    response_model=List[PublicEpisodeResponse],
+    summary="Get publicly accessible episodes (older than 2 weeks)",
+)
+async def list_public_episodes(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+) -> List[PublicEpisodeResponse]:
+    """Get episodes older than 14 days for public SEO pages."""
+    cutoff = date.today() - timedelta(days=PUBLIC_CUTOFF_DAYS)
+    min_date = date(2026, 1, 20)
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.status == "ready")
+        .where(PodcastEpisode.episode_date >= min_date)
+        .where(PodcastEpisode.episode_date <= cutoff)
+        .order_by(desc(PodcastEpisode.episode_date))
+        .limit(limit)
+    )
+    episodes = result.scalars().all()
+    return [
+        PublicEpisodeResponse(
+            id=ep.id,
+            episode_date=ep.episode_date,
+            title=ep.title,
+            script=ep.script,
+            audio_url=ep.audio_url,
+            duration_seconds=ep.duration_seconds,
+            is_public=True,
+        )
+        for ep in episodes
+    ]
+
+
+@router.get(
+    "/public/{episode_date}",
+    response_model=PublicEpisodeResponse,
+    summary="Get a single episode for public page",
+)
+async def get_public_episode(
+    episode_date: date,
+    db: AsyncSession = Depends(get_db),
+) -> PublicEpisodeResponse:
+    """
+    Get episode by date for public pages.
+    
+    If episode is older than 14 days: returns full content (is_public=True).
+    If episode is recent: returns title/date only, no content (is_public=False).
+    """
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.episode_date == episode_date)
+        .where(PodcastEpisode.status == "ready")
+    )
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
+
+    cutoff = date.today() - timedelta(days=PUBLIC_CUTOFF_DAYS)
+    is_public = episode.episode_date <= cutoff
+
+    return PublicEpisodeResponse(
+        id=episode.id,
+        episode_date=episode.episode_date,
+        title=episode.title,
+        script=episode.script if is_public else None,
+        audio_url=episode.audio_url if is_public else None,
+        duration_seconds=episode.duration_seconds if is_public else None,
+        is_public=is_public,
+    )
