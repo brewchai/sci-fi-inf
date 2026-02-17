@@ -132,6 +132,40 @@ Why it matters: {why_it_matters}"""
         
         return script
     
+    async def generate_title(self, papers: List[Paper]) -> str:
+        """Generate an engaging episode title from the papers covered."""
+        paper_topics = "\n".join(
+            f"- {p.title}" for p in papers
+        )
+        
+        try:
+            response = await self.llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": f"""Generate a short, compelling podcast episode title (6-10 words max) based on these research papers:
+
+{paper_topics}
+
+Rules:
+- Highlight the most interesting or surprising finding
+- Be specific, not generic (NO "Science Update" or "Research Roundup")
+- No quotes, no colons, no "Episode X:"
+- Make it intriguing — something a curious person would click on
+- Examples of good titles: "Why Your Brain Forgets on Purpose", "The Protein That Rewrites Cancer Rules", "AI Learns to Smell Danger"
+
+Return ONLY the title, nothing else."""
+                }],
+                temperature=0.8,
+                max_tokens=30,
+            )
+            title = response.choices[0].message.content.strip().strip('"\'')
+            logger.info(f"Generated episode title: {title}")
+            return title
+        except Exception as e:
+            logger.warning(f"Failed to generate title: {e}")
+            return None
+    
     async def generate_episode(
         self,
         paper_ids: List[int],
@@ -154,6 +188,12 @@ Why it matters: {why_it_matters}"""
         from app.services.storage import StorageService
         
         episode_date = episode_date or date.today()
+        
+        # Generate engaging title from paper content if not provided
+        if not title:
+            papers_for_title = await self.fetch_papers(paper_ids)
+            if papers_for_title:
+                title = await self.generate_title(papers_for_title)
         title = title or f"The Eureka Feed - {episode_date.strftime('%b %d')}"
         
         # Create episode record with pending status

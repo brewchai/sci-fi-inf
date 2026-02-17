@@ -103,6 +103,46 @@ async def generate_podcast(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast: {str(e)}")
 
+
+@router.post(
+    "/backfill-titles",
+    summary="Regenerate bland episode titles using AI",
+)
+async def backfill_titles(
+    db: AsyncSession = Depends(get_db),
+):
+    """Find episodes with generic titles and regenerate them."""
+    from app.models.paper import Paper
+    
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.title.like("The Eureka Feed -%"))
+        .where(PodcastEpisode.status == "ready")
+        .order_by(desc(PodcastEpisode.episode_date))
+    )
+    episodes = result.scalars().all()
+    
+    if not episodes:
+        return {"message": "No episodes need title updates", "updated": 0}
+    
+    generator = PodcastGenerator(db)
+    updated = []
+    
+    for episode in episodes:
+        if not episode.paper_ids:
+            continue
+        papers = await generator.fetch_papers(episode.paper_ids)
+        if papers:
+            new_title = await generator.generate_title(papers)
+            if new_title:
+                old_title = episode.title
+                episode.title = new_title
+                updated.append({"date": str(episode.episode_date), "old": old_title, "new": new_title})
+    
+    await db.commit()
+    return {"message": f"Updated {len(updated)} episode titles", "updated": len(updated), "details": updated}
+
+
 class EpisodeDateResponse(BaseModel):
     """Lightweight response with just episode ID and date."""
     id: int

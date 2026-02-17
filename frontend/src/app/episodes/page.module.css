@@ -1,42 +1,112 @@
 .main {
     min-height: 100vh;
-    padding-top: calc(var(--header-height) + var(--space-xl));
+    padding-top: var(--header-height);
     background: var(--bg-primary);
 }
 
+/* Hero */
+.heroSection {
+    text-align: center;
+    padding: var(--space-3xl) var(--space-lg) var(--space-xl);
+}
+
+.heroSection h1 {
+    font-size: 2.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: var(--space-sm);
+}
+
+.heroSub {
+    font-size: 1.125rem;
+    color: var(--text-muted);
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+/* CTA Banner */
+.ctaBanner {
+    max-width: 700px;
+    margin: 0 auto var(--space-xl);
+    padding: 0 var(--space-lg);
+}
+
+.ctaContent {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+}
+
+.ctaIcon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(139, 92, 246, 0.15);
+    border-radius: 50%;
+    color: #a78bfa;
+}
+
+.ctaText {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ctaText strong {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+}
+
+.ctaText span {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.ctaButton {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    background: #8b5cf6;
+    color: white;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.ctaButton:hover {
+    background: #7c3aed;
+}
+
+/* Archive Section */
 .archiveSection {
     max-width: 700px;
     margin: 0 auto;
-    padding: var(--space-2xl) var(--space-lg) var(--space-3xl);
-}
-
-.sectionHeader {
-    text-align: center;
-    margin-bottom: var(--space-2xl);
-}
-
-.sectionHeader h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: var(--space-md);
-}
-
-.sectionHeader p {
-    font-size: 1.125rem;
-    color: var(--text-muted);
+    padding: 0 var(--space-lg) var(--space-3xl);
 }
 
 /* Episode List */
 .episodeList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-md);
 }
 
 .episodeCard {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: flex-start;
     gap: var(--space-md);
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -48,12 +118,33 @@
 
 .episodeCard:hover {
     background: var(--bg-card-hover);
-    border-color: rgba(255, 255, 255, 0.12);
-    transform: translateY(-1px);
+    border-color: rgba(139, 92, 246, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-.episodeInfo {
+/* Date Badge */
+.episodeDateBadge {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #a78bfa;
+    line-height: 1.2;
+}
+
+/* Episode Body */
+.episodeBody {
     flex: 1;
+    min-width: 0;
 }
 
 .episodeTitle {
@@ -61,32 +152,83 @@
     font-size: 1.0625rem;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: var(--space-xs);
+    margin: 0 0 var(--space-xs);
+    line-height: 1.35;
 }
 
-.episodeDate {
+.episodePreview {
     font-size: 0.875rem;
     color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0 0 var(--space-sm);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Meta Tags */
+.episodeMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.metaTag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.metaDate {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.3);
+    margin-left: auto;
 }
 
 .episodeArrow {
     flex-shrink: 0;
     color: var(--text-muted);
-    transition: color 0.2s;
+    margin-top: 4px;
+    transition: all 0.2s;
 }
 
 .episodeCard:hover .episodeArrow {
-    color: var(--accent);
+    color: #a78bfa;
+    transform: translateX(3px);
 }
 
+/* Empty State */
 .emptyState {
     text-align: center;
     padding: var(--space-3xl) var(--space-lg);
     color: var(--text-muted);
+    font-size: 1rem;
 }
 
+/* Mobile */
 @media (max-width: 768px) {
-    .sectionHeader h1 {
+    .heroSection h1 {
         font-size: 1.75rem;
+    }
+
+    .ctaContent {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .ctaText {
+        align-items: center;
+    }
+
+    .episodeDateBadge {
+        display: none;
     }
 }
