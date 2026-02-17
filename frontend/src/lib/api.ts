@@ -62,13 +62,13 @@ export async function fetchPaper(id: number): Promise<Paper> {
 }
 
 export async function fetchLatestPodcast(): Promise<PodcastEpisode> {
-    const res = await fetch(`${API_URL}/podcast/latest`);
+    const res = await fetch(`${API_URL}/podcast/latest`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch latest podcast');
     return res.json();
 }
 
 export async function fetchPodcastEpisodes(limit: number = 20): Promise<PodcastEpisode[]> {
-    const res = await fetch(`${API_URL}/podcast/list?limit=${limit}`);
+    const res = await fetch(`${API_URL}/podcast/list?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch podcast episodes');
     return res.json();
 }
@@ -89,7 +89,7 @@ export async function fetchPapers(ids: number[]): Promise<Paper[]> {
 }
 
 export async function fetchEpisodeDates(limit: number = 30): Promise<EpisodeDate[]> {
-    const res = await fetch(`${API_URL}/podcast/dates?limit=${limit}`);
+    const res = await fetch(`${API_URL}/podcast/dates?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch episode dates');
     return res.json();
 }
@@ -112,13 +112,13 @@ export type PublicEpisode = {
 };
 
 export async function fetchPublicEpisodes(limit: number = 50): Promise<PublicEpisode[]> {
-    const res = await fetch(`${API_URL}/podcast/public?limit=${limit}`);
+    const res = await fetch(`${API_URL}/podcast/public?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch public episodes');
     return res.json();
 }
 
 export async function fetchPublicEpisodeByDate(episodeDate: string): Promise<PublicEpisode> {
-    const res = await fetch(`${API_URL}/podcast/public/${episodeDate}`);
+    const res = await fetch(`${API_URL}/podcast/public/${episodeDate}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }
