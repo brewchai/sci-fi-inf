@@ -12,6 +12,7 @@ import { AudioPlayer } from '@/components/AudioPlayer';
 import { TranscriptSection } from '@/components/TranscriptSection';
 import { HomeFAQItem } from '@/components/HomeFAQItem';
 import { faqs } from '@/lib/faqData';
+import { fetchLatestPodcast, fetchPapers } from '@/lib/api';
 import styles from './page.module.css';
 
 const categories = [
@@ -37,35 +38,6 @@ const features = [
 ];
 
 
-
-// Latest episode content - update this when deploying new episodes
-const LATEST_EPISODE = {
-    title: "The Eureka Feed — Jan 16, 2026",
-    audioSrc: "/audio/latest-episode.mp3",
-    transcript: `Welcome back to The Eureka Feed, where we dive into the latest discoveries that spark curiosity and wonder! Today, we're exploring the intricate dance of neurons in our brains, the quest for inclusive education in the Philippines, and the potential impacts of climate interventions on our oceans. Let's jump right in!
-
-What if I told you that not every neuron in your brain shows the same markers of health? A recent study focused on a special marker called NeuN, which helps scientists identify neurons—the star players in our brain's communication network. Here's the twist: while NeuN is a handy tool, it doesn't tell the whole story. Imagine a movie where some actors wear costumes that don't quite fit their roles. Just because a neuron doesn't express NeuN doesn't mean it's not doing its job! Certain important neurons, especially those tied to our sense of smell, can look like they're off the clock, but they're very much alive. Researchers found that after brain injuries, NeuN levels can dip temporarily, making it tricky to assess neuron health. This means doctors need to expand their toolkit beyond just NeuN to get a full picture of brain health—crucial for tackling conditions like Alzheimer's. So, what's the takeaway? A deeper understanding of neuron health could lead to better treatments and outcomes for people facing brain diseases.
-
-Now, let's shift gears and head over to the world of education in the Philippines. Picture a classroom where every child, regardless of their unique needs, learns side by side. That's the dream of inclusive education! Researchers spoke with school heads and teachers to see how well this dream is being realized. The good news? Both groups are on the same page about the importance of inclusion. School leaders are savvy about the laws supporting this movement, while teachers have insight into how to engage every student. But there are some hurdles to clear. Many teachers feel they could use more training, and there's a lack of programs to help students transition smoothly from one grade to the next. By understanding these challenges through surveys and interviews, researchers highlighted the need for better resources and clearer communication. This research underscores the vital role of inclusive education—because when all students thrive together, it creates a richer learning environment for everyone.
-
-Finally, let's dive into our oceans, where rising temperatures due to climate change are sending out alarm bells. Scientists are exploring climate interventions, like sucking carbon dioxide out of the air—think of it as a vacuum cleaner for our atmosphere—or reflecting sunlight away from Earth. These methods could help cool the planet, but here's the catch: they might unintentionally harm marine life. It's like trying to cure one ailment but inadvertently causing another. The researchers reviewed various proposals and found that while some could benefit our oceans, others could pose risks to fish and underwater ecosystems. The delicate balance of marine life means we need to tread carefully. Understanding how these interventions will affect our oceans is crucial, as our underwater ecosystems are vital for food supply and environmental balance.
-
-So, there you have it! From the complexities of brain health to the importance of inclusive education and the future of our oceans amid climate change, each discovery invites us to learn more and to care deeper. As we continue to explore the wonders of science, remember: curiosity is the spark that ignites understanding. What will we uncover next? Stay tuned for more intriguing discoveries on The Eureka Feed!`,
-    papers: [
-        {
-            title: "NeuN expression in health and disease: A histological perspective on neuronal heterogeneity",
-            url: "https://doi.org/10.14670/hh-18-965"
-        },
-        {
-            title: "Inclusive Education: School Heads and Teachers' Perspectives in the Philippines",
-            url: "https://doi.org/10.26803/ijlter.25.1.29"
-        },
-        {
-            title: "Potential Impacts of Climate Interventions on Marine Ecosystems",
-            url: "https://doi.org/10.1029/2024rg000876"
-        }
-    ]
-};
 
 // JSON-LD structured data
 function JsonLd() {
@@ -122,7 +94,25 @@ function JsonLd() {
     );
 }
 
-export default function LandingPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function LandingPage() {
+    // Fetch latest episode from API
+    let latestEpisode: Awaited<ReturnType<typeof fetchLatestPodcast>> | null = null;
+    let episodePapers: { title: string; url: string }[] = [];
+
+    try {
+        latestEpisode = await fetchLatestPodcast();
+        if (latestEpisode?.paper_ids?.length) {
+            const papers = await fetchPapers(latestEpisode.paper_ids);
+            episodePapers = papers.map(p => ({
+                title: p.title,
+                url: p.doi ? `https://doi.org/${p.doi}` : (p.pdf_url || '#'),
+            }));
+        }
+    } catch {
+        // API might be down — page still renders without episode
+    }
     return (
         <>
             <JsonLd />
@@ -227,23 +217,26 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* Sample Episode */}
-                <section className={styles.sampleEpisode} id="listen">
-                    <div className={styles.sectionHeader}>
-                        <h2>Hear It For Yourself</h2>
-                        <p>A 3-minute briefing from today&apos;s research.</p>
-                    </div>
+                {latestEpisode && (
+                    <section className={styles.sampleEpisode} id="listen">
+                        <div className={styles.sectionHeader}>
+                            <h2>Hear It For Yourself</h2>
+                            <p>A 3-minute briefing from today&apos;s research.</p>
+                        </div>
 
-                    <AudioPlayer
-                        src={LATEST_EPISODE.audioSrc}
-                        title={LATEST_EPISODE.title}
-                    />
+                        {latestEpisode.audio_url && (
+                            <AudioPlayer
+                                src={latestEpisode.audio_url}
+                                title={latestEpisode.title}
+                            />
+                        )}
 
-                    <TranscriptSection
-                        transcript={LATEST_EPISODE.transcript}
-                        papers={LATEST_EPISODE.papers}
-                    />
-                </section>
+                        <TranscriptSection
+                            transcript={latestEpisode.script || ''}
+                            papers={episodePapers}
+                        />
+                    </section>
+                )}
 
                 {/* Categories */}
                 <section className={styles.categories} id="categories">

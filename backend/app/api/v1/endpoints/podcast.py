@@ -144,9 +144,10 @@ async def backfill_titles(
 
 
 class EpisodeDateResponse(BaseModel):
-    """Lightweight response with just episode ID and date."""
+    """Lightweight response with just episode ID, date, and title."""
     id: int
     episode_date: date
+    title: str
     duration_seconds: Optional[int]
 
     class Config:
@@ -166,7 +167,7 @@ async def list_episode_dates(
     # Only show episodes from Jan 20, 2026 onwards
     min_date = date(2026, 1, 20)
     result = await db.execute(
-        select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.duration_seconds)
+        select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.title, PodcastEpisode.duration_seconds)
         .where(PodcastEpisode.status == "ready")
         .where(PodcastEpisode.episode_date >= min_date)
         .order_by(desc(PodcastEpisode.episode_date))
@@ -174,7 +175,12 @@ async def list_episode_dates(
     )
     rows = result.all()
     return [
-        EpisodeDateResponse(id=row.id, episode_date=row.episode_date, duration_seconds=row.duration_seconds)
+        EpisodeDateResponse(
+            id=row.id, 
+            episode_date=row.episode_date, 
+            title=row.title,
+            duration_seconds=row.duration_seconds
+        )
         for row in rows
     ]
 

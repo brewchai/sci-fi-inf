@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { BookOpen } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase';
 import styles from './Header.module.css';
 
 export function Header() {
     const router = useRouter();
+    const pathname = usePathname();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -56,7 +57,7 @@ export function Header() {
                         user ? (
                             <>
                                 <Link href="/feed" className={styles.navLink}>My Feed</Link>
-                                <Link href="/episodes" className={styles.navLink}>Archive</Link>
+                                {pathname !== '/feed' && <Link href="/episodes" className={styles.navLink}>Archive</Link>}
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
                                 <button onClick={handleSignOut} className={styles.navLink}>
                                     Sign Out

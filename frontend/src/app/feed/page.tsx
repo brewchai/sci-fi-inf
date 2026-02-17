@@ -302,6 +302,9 @@ export default function FeedPage() {
                                             <span className={styles.pillDate}>
                                                 {getRelativeLabel(dateItem.episode_date)}
                                             </span>
+                                            <span className={styles.pillTitle}>
+                                                {dateItem.title}
+                                            </span>
                                             {dateItem.duration_seconds && (
                                                 <span className={styles.pillDuration}>
                                                     {formatDuration(dateItem.duration_seconds)}

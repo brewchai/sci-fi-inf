@@ -36,6 +36,7 @@ export type PodcastEpisode = {
 export type EpisodeDate = {
     id: number;
     episode_date: string;
+    title: string;
     duration_seconds: number | null;
 };
 
