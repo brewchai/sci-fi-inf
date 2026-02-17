@@ -185,50 +185,9 @@ async def get_latest_episode(
     return PodcastEpisodeResponse.model_validate(episode)
 
 
-@router.get(
-    "/{episode_id}",
-    response_model=PodcastEpisodeResponse,
-    summary="Get a podcast episode by ID",
-)
-async def get_episode(
-    episode_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> PodcastEpisodeResponse:
-    """Get a specific podcast episode by its ID."""
-    result = await db.execute(
-        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
-    )
-    episode = result.scalar_one_or_none()
-    
-    if not episode:
-        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
-    
-    return PodcastEpisodeResponse.model_validate(episode)
-
-
-@router.get(
-    "/by-date/{episode_date}",
-    response_model=PodcastEpisodeResponse,
-    summary="Get a podcast episode by date",
-)
-async def get_episode_by_date(
-    episode_date: date,
-    db: AsyncSession = Depends(get_db),
-) -> PodcastEpisodeResponse:
-    """Get the podcast episode for a specific date."""
-    result = await db.execute(
-        select(PodcastEpisode).where(PodcastEpisode.episode_date == episode_date)
-    )
-    episode = result.scalar_one_or_none()
-    
-    if not episode:
-        raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
-    
-    return PodcastEpisodeResponse.model_validate(episode)
-
-
 # =============================================================================
 # Public Endpoints (for SEO — no auth required)
+# IMPORTANT: These must be defined BEFORE /{episode_id} to avoid route conflicts
 # =============================================================================
 
 PUBLIC_CUTOFF_DAYS = 14  # Episodes older than this are publicly accessible
@@ -320,3 +279,49 @@ async def get_public_episode(
         duration_seconds=episode.duration_seconds if is_public else None,
         is_public=is_public,
     )
+
+
+# =============================================================================
+# ID/Date Lookup Endpoints (these use path params, must come AFTER /public)
+# =============================================================================
+
+@router.get(
+    "/{episode_id}",
+    response_model=PodcastEpisodeResponse,
+    summary="Get a podcast episode by ID",
+)
+async def get_episode(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> PodcastEpisodeResponse:
+    """Get a specific podcast episode by its ID."""
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+    
+    return PodcastEpisodeResponse.model_validate(episode)
+
+
+@router.get(
+    "/by-date/{episode_date}",
+    response_model=PodcastEpisodeResponse,
+    summary="Get a podcast episode by date",
+)
+async def get_episode_by_date(
+    episode_date: date,
+    db: AsyncSession = Depends(get_db),
+) -> PodcastEpisodeResponse:
+    """Get the podcast episode for a specific date."""
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.episode_date == episode_date)
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
+    
+    return PodcastEpisodeResponse.model_validate(episode)
