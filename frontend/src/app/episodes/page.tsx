@@ -24,7 +24,7 @@ function formatDate(dateStr: string): string {
     });
 }
 
-export const revalidate = 3600; // revalidate every hour
+export const dynamic = 'force-dynamic'; // always fetch fresh from backend
 
 export default async function EpisodesPage() {
     let episodes: Awaited<ReturnType<typeof fetchPublicEpisodes>> = [];

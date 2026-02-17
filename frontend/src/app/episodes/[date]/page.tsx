@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowRight, Lock, ArrowLeft } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-import { fetchPublicEpisodeByDate, fetchPublicEpisodes } from '@/lib/api';
+import { fetchPublicEpisodeByDate } from '@/lib/api';
 import styles from './page.module.css';
 
 type Props = {
@@ -54,17 +54,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 }
 
-// Generate static pages for known public episodes at build time
-export async function generateStaticParams() {
-    try {
-        const episodes = await fetchPublicEpisodes();
-        return episodes.map((ep) => ({ date: ep.episode_date }));
-    } catch {
-        return [];
-    }
-}
-
-export const revalidate = 3600; // revalidate hourly
+export const dynamic = 'force-dynamic'; // always fetch fresh from backend
 
 // JSON-LD structured data for a podcast episode
 function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration }: {
