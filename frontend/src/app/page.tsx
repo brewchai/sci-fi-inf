@@ -1,6 +1,3 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
 import {
     Sparkles,
@@ -8,12 +5,13 @@ import {
     ArrowRight,
     Newspaper,
     Filter,
-    ChevronDown,
-    ChevronUp,
 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { AudioPlayer } from '@/components/AudioPlayer';
+import { TranscriptSection } from '@/components/TranscriptSection';
+import { HomeFAQItem } from '@/components/HomeFAQItem';
+import { faqs } from '@/lib/faqData';
 import styles from './page.module.css';
 
 const categories = [
@@ -38,32 +36,7 @@ const features = [
     'Mobile-friendly, delivered daily',
 ];
 
-const faqs = [
-    {
-        question: "What is The Eureka Feed?",
-        answer: "A daily podcast that transforms cutting-edge academic research into 3-minute audio briefings. We scan thousands of papers, select the most impactful ones, and explain them in plain language—no PhD required."
-    },
-    {
-        question: "Do you use AI?",
-        answer: "Our curation algorithm is deterministic—no AI involved in selecting papers. We score them based on recency, citation potential, and topic diversity. AI only comes into play afterward: to summarize the text and generate the audio narration."
-    },
-    {
-        question: "Can I trust the content?",
-        answer: "Every summary is grounded in real papers with real text, and we link to the original source so you can verify. We're not perfect—if you spot an error, please contact us."
-    },
-    {
-        question: "How do you curate papers?",
-        answer: "We pull from OpenAlex daily. Papers are scored on recency, citation potential, topic diversity, and accessibility. Top picks are summarized and combined into a cohesive briefing."
-    },
-    {
-        question: "Who is this for?",
-        answer: "Curious professionals, lifelong learners, and anyone who wants to stay informed about science without academic jargon. If you enjoy Huberman Lab or Hacker News, you'll feel at home."
-    },
-    {
-        question: "How often do you publish?",
-        answer: "Every weekday morning. Each episode covers a handful of notable recent papers."
-    },
-];
+
 
 // Latest episode content - update this when deploying new episodes
 const LATEST_EPISODE = {
@@ -94,84 +67,65 @@ So, there you have it! From the complexities of brain health to the importance o
     ]
 };
 
-function TranscriptSection() {
-    const [expanded, setExpanded] = useState(false);
+// JSON-LD structured data
+function JsonLd() {
+    const websiteJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'The Eureka Feed',
+        url: 'https://www.theeurekafeed.com',
+        description: 'Daily science research podcast — the latest academic papers explained for curious minds in just 3 minutes.',
+        potentialAction: {
+            '@type': 'SearchAction',
+            target: 'https://www.theeurekafeed.com/?q={search_term_string}',
+            'query-input': 'required name=search_term_string',
+        },
+    };
 
-    // Split transcript into paragraphs
-    const paragraphs = LATEST_EPISODE.transcript.split('\n\n').filter(p => p.trim());
-    const previewParagraphs = paragraphs.slice(0, 2);
-    const remainingParagraphs = paragraphs.slice(2);
+    const podcastJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'PodcastSeries',
+        name: 'The Eureka Feed',
+        url: 'https://www.theeurekafeed.com',
+        description: 'A daily podcast that transforms cutting-edge academic research into 3-minute audio briefings.',
+        webFeed: 'https://www.theeurekafeed.com/feed',
+    };
 
-    return (
-        <div className={styles.transcript}>
-            {previewParagraphs.map((p, i) => (
-                <p key={i}>{p}</p>
-            ))}
-
-            {expanded && remainingParagraphs.map((p, i) => (
-                <p key={i + 2} className={i === remainingParagraphs.length - 1 ? styles.transcriptSignoff : undefined}>
-                    {p}
-                </p>
-            ))}
-
-            {remainingParagraphs.length > 0 && (
-                <button
-                    className={styles.readMoreBtn}
-                    onClick={() => setExpanded(!expanded)}
-                >
-                    {expanded ? (
-                        <>Read less <ChevronUp size={16} /></>
-                    ) : (
-                        <>Read more <ChevronDown size={16} /></>
-                    )}
-                </button>
-            )}
-
-            {/* Papers featured in this episode */}
-            <div className={styles.paperLinks}>
-                <h4>📄 Papers featured in this episode</h4>
-                <ul>
-                    {LATEST_EPISODE.papers.map((paper, i) => (
-                        <li key={i}>
-                            <a href={paper.url} target="_blank" rel="noopener noreferrer">
-                                {paper.title}
-                            </a>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-        </div>
-    );
-}
-
-function FAQItem({ question, answer }: { question: string; answer: string }) {
-    const [isOpen, setIsOpen] = useState(false);
+    const faqJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqs.map((faq) => ({
+            '@type': 'Question',
+            name: faq.question,
+            acceptedAnswer: {
+                '@type': 'Answer',
+                text: faq.answer,
+            },
+        })),
+    };
 
     return (
-        <div className={styles.faqItem}>
-            <button
-                className={styles.faqQuestion}
-                onClick={() => setIsOpen(!isOpen)}
-                aria-expanded={isOpen}
-            >
-                <span>{question}</span>
-                {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-            </button>
-            {isOpen && (
-                <div className={styles.faqAnswer}>
-                    <p>{answer}</p>
-                    {question === "Can I trust the content?" && (
-                        <p><Link href="/contact" className={styles.faqLink}>Contact us →</Link></p>
-                    )}
-                </div>
-            )}
-        </div>
+        <>
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+            />
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(podcastJsonLd) }}
+            />
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+            />
+        </>
     );
 }
 
 export default function LandingPage() {
     return (
         <>
+            <JsonLd />
             <Header />
             <main className={styles.main}>
                 {/* Hero */}
@@ -234,7 +188,7 @@ export default function LandingPage() {
                             <h3>We Harvest</h3>
                             <p>
                                 Every week, we scan thousands of newly published research papers
-                                to find what's genuinely new and noteworthy.
+                                to find what&apos;s genuinely new and noteworthy.
                             </p>
                         </div>
 
@@ -267,7 +221,7 @@ export default function LandingPage() {
                         <div className={styles.nerdyFactLabel}>🤓 Nerdy Fact</div>
                         <p>
                             Over 3 million new research papers are published every year.
-                            That's 8,200 per day. Nobody can keep up—so we built this
+                            That&apos;s 8,200 per day. Nobody can keep up—so we built this
                             to help you punch above your weight.
                         </p>
                     </div>
@@ -277,7 +231,7 @@ export default function LandingPage() {
                 <section className={styles.sampleEpisode} id="listen">
                     <div className={styles.sectionHeader}>
                         <h2>Hear It For Yourself</h2>
-                        <p>A 3-minute briefing from today's research.</p>
+                        <p>A 3-minute briefing from today&apos;s research.</p>
                     </div>
 
                     <AudioPlayer
@@ -285,14 +239,17 @@ export default function LandingPage() {
                         title={LATEST_EPISODE.title}
                     />
 
-                    <TranscriptSection />
+                    <TranscriptSection
+                        transcript={LATEST_EPISODE.transcript}
+                        papers={LATEST_EPISODE.papers}
+                    />
                 </section>
 
                 {/* Categories */}
                 <section className={styles.categories} id="categories">
                     <div className={styles.sectionHeader}>
                         <h2>Topics We Cover</h2>
-                        <p>We curate the best research from across these fields—so you don't have to.</p>
+                        <p>We curate the best research from across these fields—so you don&apos;t have to.</p>
                     </div>
 
                     <div className={styles.categoriesGrid}>
@@ -316,8 +273,8 @@ export default function LandingPage() {
                             filtered through sensationalized headlines.
                         </p>
                         <p>
-                            We believe being scientifically literate shouldn't require a
-                            subscription to Nature. It shouldn't require deciphering 30-page
+                            We believe being scientifically literate shouldn&apos;t require a
+                            subscription to Nature. It shouldn&apos;t require deciphering 30-page
                             papers written for specialists. It should be accessible, digestible,
                             and—dare we say—enjoyable.
                         </p>
@@ -364,7 +321,7 @@ export default function LandingPage() {
 
                     <div className={styles.faqList}>
                         {faqs.map((faq, i) => (
-                            <FAQItem key={i} question={faq.question} answer={faq.answer} />
+                            <HomeFAQItem key={i} question={faq.question} answer={faq.answer} />
                         ))}
                     </div>
                 </section>
