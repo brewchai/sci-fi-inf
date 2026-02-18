@@ -1,9 +1,9 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 
-from app.api import deps
+from app.db.session import get_db
 from app.models.social import SocialPost
 from app.models.paper import Paper
 from pydantic import BaseModel
@@ -21,8 +21,8 @@ class SocialPostResponse(BaseModel):
         from_attributes = True
 
 @router.get("/harvest", response_model=List[SocialPostResponse])
-def get_harvested_tweets(
-    db: Session = Depends(deps.get_db),
+async def get_harvested_tweets(
+    db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
 ) -> Any:
@@ -30,14 +30,15 @@ def get_harvested_tweets(
     Get all generated social media posts.
     Protected/Secret endpoint.
     """
-    posts = (
-        db.query(SocialPost, Paper.title.label("paper_title"))
+    result = await db.execute(
+        select(SocialPost, Paper.title.label("paper_title"))
         .join(Paper, SocialPost.paper_id == Paper.id)
         .order_by(desc(SocialPost.created_at))
         .offset(skip)
         .limit(limit)
-        .all()
     )
+    
+    posts = result.all()
     
     return [
         SocialPostResponse(
