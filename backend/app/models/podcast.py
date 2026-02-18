@@ -32,5 +32,6 @@ class PodcastEpisode(Base):
     script: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     audio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    slug: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

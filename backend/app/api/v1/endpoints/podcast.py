@@ -56,6 +56,8 @@ class PodcastEpisodeResponse(BaseModel):
     script: Optional[str]
     audio_url: Optional[str]
     duration_seconds: Optional[int]
+    duration_seconds: Optional[int]
+    slug: Optional[str]
     status: str
     
     class Config:
@@ -141,6 +143,33 @@ async def backfill_titles(
     
     await db.commit()
     return {"message": f"Updated {len(updated)} episode titles", "updated": len(updated), "details": updated}
+
+
+@router.post(
+    "/backfill-slugs",
+    summary="Backfill slugs for existing episodes",
+)
+async def backfill_slugs(
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate slugs for episodes that don't have them."""
+    from slugify import slugify
+    
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.slug.is_(None))
+    )
+    episodes = result.scalars().all()
+    
+    updated_count = 0
+    for episode in episodes:
+        base_slug = slugify(episode.title)
+        # Append date to ensure uniqueness and SEO value
+        date_suffix = episode.episode_date.strftime('%b-%d-%Y').lower()
+        episode.slug = f"{base_slug}-{date_suffix}"
+        updated_count += 1
+    
+    await db.commit()
+    return {"message": f"Backfilled slugs for {updated_count} episodes"}
 
 
 class EpisodeDateResponse(BaseModel):
@@ -247,6 +276,7 @@ class PublicEpisodeResponse(BaseModel):
     script: Optional[str]
     audio_url: Optional[str]
     duration_seconds: Optional[int]
+    slug: Optional[str]
     is_public: bool
 
     class Config:
@@ -282,6 +312,7 @@ async def list_public_episodes(
             script=ep.script,
             audio_url=ep.audio_url,
             duration_seconds=ep.duration_seconds,
+            slug=ep.slug,
             is_public=True,
         )
         for ep in episodes
@@ -322,7 +353,44 @@ async def get_public_episode(
         title=episode.title,
         script=episode.script if is_public else None,
         audio_url=episode.audio_url if is_public else None,
+        audio_url=episode.audio_url if is_public else None,
         duration_seconds=episode.duration_seconds if is_public else None,
+        slug=episode.slug,
+        is_public=is_public,
+    )
+
+
+@router.get(
+    "/public/slug/{slug}",
+    response_model=PublicEpisodeResponse,
+    summary="Get a public episode by slug",
+)
+async def get_public_episode_by_slug(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+) -> PublicEpisodeResponse:
+    """Get public episode by slug."""
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.slug == slug)
+        .where(PodcastEpisode.status == "ready")
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"Episode not found: {slug}")
+        
+    cutoff = date.today() - timedelta(days=PUBLIC_CUTOFF_DAYS)
+    is_public = episode.episode_date <= cutoff
+
+    return PublicEpisodeResponse(
+        id=episode.id,
+        episode_date=episode.episode_date,
+        title=episode.title,
+        script=episode.script if is_public else None,
+        audio_url=episode.audio_url if is_public else None,
+        duration_seconds=episode.duration_seconds if is_public else None,
+        slug=episode.slug,
         is_public=is_public,
     )
 

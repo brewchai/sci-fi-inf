@@ -108,6 +108,7 @@ export type PublicEpisode = {
     script: string | null;
     audio_url: string | null;
     duration_seconds: number | null;
+    slug: string | null;
     is_public: boolean;
 };
 
@@ -119,6 +120,12 @@ export async function fetchPublicEpisodes(limit: number = 50): Promise<PublicEpi
 
 export async function fetchPublicEpisodeByDate(episodeDate: string): Promise<PublicEpisode> {
     const res = await fetch(`${API_URL}/podcast/public/${episodeDate}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch episode');
+    return res.json();
+}
+
+export async function fetchPublicEpisodeBySlug(slug: string): Promise<PublicEpisode> {
+    const res = await fetch(`${API_URL}/podcast/public/slug/${slug}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }

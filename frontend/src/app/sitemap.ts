@@ -49,7 +49,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     try {
         const episodes = await fetchPublicEpisodes();
         episodePages = episodes.map((ep) => ({
-            url: `${baseUrl}/episodes/${ep.episode_date}`,
+            url: `${baseUrl}/episodes/${ep.slug || ep.episode_date}`,
             lastModified: new Date(ep.episode_date + 'T00:00:00'),
             changeFrequency: 'monthly' as const,
             priority: 0.7,

@@ -3,11 +3,11 @@ import Link from 'next/link';
 import { ArrowRight, Lock, ArrowLeft, BookOpen, Headphones } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-import { fetchPublicEpisodeByDate } from '@/lib/api';
+import { fetchPublicEpisodeBySlug, fetchPublicEpisodeByDate } from '@/lib/api';
 import styles from './page.module.css';
 
 type Props = {
-    params: { date: string };
+    params: { slug: string };
 };
 
 function formatDate(dateStr: string): string {
@@ -28,28 +28,29 @@ function formatDuration(seconds: number | null): string {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-    const dateStr = params.date;
-    const formattedDate = formatDate(dateStr);
+    const { slug } = params;
 
     try {
-        const episode = await fetchPublicEpisodeByDate(dateStr);
+        const episode = await fetchPublicEpisodeBySlug(slug);
+        const formattedDate = formatDate(episode.episode_date);
+
         return {
             title: episode.title,
             description: `Listen to The Eureka Feed for ${formattedDate} — the latest academic research explained in 3 minutes. Full transcript included.`,
             openGraph: {
                 title: episode.title,
                 description: `The Eureka Feed — ${formattedDate}. Daily science research podcast with full transcript.`,
-                url: `https://www.theeurekafeed.com/episodes/${dateStr}`,
+                url: `https://www.theeurekafeed.com/episodes/${slug}`,
                 type: 'article',
             },
             alternates: {
-                canonical: `https://www.theeurekafeed.com/episodes/${dateStr}`,
+                canonical: `https://www.theeurekafeed.com/episodes/${slug}`,
             },
         };
     } catch {
         return {
-            title: `Episode — ${formattedDate}`,
-            description: `The Eureka Feed episode for ${formattedDate}.`,
+            title: 'Episode Not Found',
+            description: 'The Eureka Feed episode.',
         };
     }
 }
@@ -57,12 +58,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export const dynamic = 'force-dynamic'; // always fetch fresh from backend
 
 // JSON-LD structured data for a podcast episode
-function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration }: {
+function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration, slug }: {
     title: string;
     dateStr: string;
     script: string | null;
     audioUrl: string | null;
     duration: number | null;
+    slug: string;
 }) {
     const jsonLd = {
         '@context': 'https://schema.org',
@@ -70,7 +72,7 @@ function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration }: {
         name: title,
         datePublished: dateStr,
         description: `Daily science research briefing for ${formatDate(dateStr)}. The latest academic papers explained in simple terms.`,
-        url: `https://www.theeurekafeed.com/episodes/${dateStr}`,
+        url: `https://www.theeurekafeed.com/episodes/${slug}`,
         partOfSeries: {
             '@type': 'PodcastSeries',
             name: 'The Eureka Feed',
@@ -97,11 +99,16 @@ function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration }: {
 }
 
 export default async function EpisodePage({ params }: Props) {
-    const dateStr = params.date;
+    const { slug } = params;
+    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(slug);
 
     let episode;
     try {
-        episode = await fetchPublicEpisodeByDate(dateStr);
+        if (isDate) {
+            episode = await fetchPublicEpisodeByDate(slug);
+        } else {
+            episode = await fetchPublicEpisodeBySlug(slug);
+        }
     } catch {
         return (
             <>
@@ -110,7 +117,7 @@ export default async function EpisodePage({ params }: Props) {
                     <section className={styles.episodeSection}>
                         <div className={styles.gatedSection}>
                             <h2>Episode Not Found</h2>
-                            <p>We couldn&apos;t find an episode for this date.</p>
+                            <p>We couldn&apos;t find an episode with this URL.</p>
                             <Link href="/episodes" className={styles.loginButton}>
                                 Browse Episodes <ArrowRight size={18} />
                             </Link>
@@ -121,6 +128,9 @@ export default async function EpisodePage({ params }: Props) {
             </>
         );
     }
+
+    // We get dateStr from the episode itself now
+    const dateStr = episode.episode_date;
 
     // Gated episode — show login CTA
     if (!episode.is_public) {
@@ -173,6 +183,7 @@ export default async function EpisodePage({ params }: Props) {
                 script={episode.script}
                 audioUrl={episode.audio_url}
                 duration={episode.duration_seconds}
+                slug={slug}
             />
             <Header />
             <main className={styles.main}>

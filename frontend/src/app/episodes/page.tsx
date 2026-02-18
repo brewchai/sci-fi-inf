@@ -82,7 +82,7 @@ export default async function EpisodesPage() {
                             {episodes.map((ep) => (
                                 <Link
                                     key={ep.id}
-                                    href={`/episodes/${ep.episode_date}`}
+                                    href={`/episodes/${ep.slug || ep.episode_date}`}
                                     className={styles.episodeCard}
                                 >
                                     <div className={styles.episodeDateBadge}>

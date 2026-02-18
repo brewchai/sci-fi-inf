@@ -33,3 +33,4 @@ supabase>=2.0.0
 
 # PDF processing
 pymupdf>=1.23.0
+python-slugify>=8.0.0

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from openai import AsyncOpenAI
 from loguru import logger
+from slugify import slugify
 
 from app.core.config import settings
 from app.models.paper import Paper
@@ -202,6 +203,7 @@ Return ONLY the title, nothing else."""
             title=title,
             paper_ids=paper_ids,
             status="generating",
+            slug=f"{slugify(title)}-{episode_date.strftime('%b-%d-%Y').lower()}",
         )
         self.db.add(episode)
         await self.db.flush()
