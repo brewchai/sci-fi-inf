@@ -27,6 +27,22 @@ async def generate_tweets_for_paper(paper: Paper) -> str:
     if content_source and len(content_source) > 10000:
         content_source = content_source[:10000] + "..."
 
+    CTAS = [
+        "Join Eurekafeed.com for link to paper and to listen to audio format of absolute cutting edge research before anybody else.",
+        "🎧 Listen to the full audio breakdown of this paper at Eurekafeed.com.",
+        "Get the full paper + audio summary instantly at Eurekafeed.com 🧠",
+        "Go deeper: Audio format & source link available on Eurekafeed.com.",
+        "Want this cutting-edge research in audio? Join Eurekafeed.com.",
+        "Full access (Paper + Audio) 👉 Eurekafeed.com",
+        "Don't just read it. Hear the breakthrough at Eurekafeed.com.",
+        "Eurekafeed.com: The fastest way to consume cutting-edge science.",
+        "Stream the audio version of this study at Eurekafeed.com 🎧",
+        "Unlock the full insight (Audio + Text) at Eurekafeed.com.",
+        "Join the inner circle of science at Eurekafeed.com."
+    ]
+    import random
+    selected_cta = random.choice(CTAS)
+
     prompt = f"""
     You are a viral social media manager for "The Eureka Feed", a cutting-edge science podcast.
     
@@ -38,7 +54,7 @@ async def generate_tweets_for_paper(paper: Paper) -> str:
     Format Constraints:
     1. Hook: A single sentence that grabs attention (startling fact, question, or bold claim).
     2. Body: 2-3 sentences explaining the core breakthrough or insight.
-    3. CTA: Must end with exactly: "Join Eurekafeed.com for link to paper and to listen to audio format of absolute cutting edge research before anybody else."
+    3. CTA: Must end with exactly: "{selected_cta}"
     
     Output Format:
     Separate each tweet with "---"
