@@ -120,12 +120,12 @@
 }
 
 .ctaCard:first-child {
-    border-color: rgba(139, 92, 246, 0.25);
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.05));
+    border-color: rgba(212, 168, 83, 0.3);
+    background: linear-gradient(135deg, rgba(212, 168, 83, 0.1), rgba(212, 168, 83, 0.05));
 }
 
 .ctaIcon {
-    color: #a78bfa;
+    color: var(--accent);
     margin-bottom: var(--space-md);
 }
 
@@ -147,8 +147,8 @@
     align-items: center;
     gap: var(--space-xs);
     padding: 10px 20px;
-    background: #8b5cf6;
-    color: white;
+    background: var(--accent);
+    color: var(--bg-primary);
     font-weight: 600;
     font-size: 0.875rem;
     border-radius: var(--radius-md);
@@ -157,8 +157,8 @@
 }
 
 .ctaButton:hover {
-    background: #7c3aed;
-    color: white;
+    background: var(--accent-hover);
+    color: var(--bg-primary);
     transform: translateY(-1px);
 }
 

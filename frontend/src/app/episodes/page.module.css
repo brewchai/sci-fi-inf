@@ -35,8 +35,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-md);
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
-    border: 1px solid rgba(139, 92, 246, 0.25);
+    background: linear-gradient(135deg, rgba(212, 168, 83, 0.12), rgba(212, 168, 83, 0.08));
+    border: 1px solid rgba(212, 168, 83, 0.25);
     border-radius: var(--radius-lg);
     padding: var(--space-md) var(--space-lg);
 }
@@ -48,9 +48,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(212, 168, 83, 0.15);
     border-radius: 50%;
-    color: #a78bfa;
+    color: var(--accent);
 }
 
 .ctaText {
@@ -75,8 +75,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-xs);
-    background: #8b5cf6;
-    color: white;
+    background: var(--accent);
+    color: var(--bg-primary);
     font-size: 0.8125rem;
     font-weight: 600;
     padding: 8px 16px;
@@ -87,7 +87,7 @@
 }
 
 .ctaButton:hover {
-    background: #7c3aed;
+    background: var(--accent-hover);
 }
 
 /* Archive Section */
@@ -118,7 +118,7 @@
 
 .episodeCard:hover {
     background: var(--bg-card-hover);
-    border-color: rgba(139, 92, 246, 0.3);
+    border-color: rgba(212, 168, 83, 0.3);
     transform: translateY(-2px);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
@@ -132,12 +132,12 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    background: rgba(212, 168, 83, 0.1);
+    border: 1px solid rgba(212, 168, 83, 0.2);
     border-radius: var(--radius-md);
     font-size: 0.75rem;
     font-weight: 700;
-    color: #a78bfa;
+    color: var(--accent);
     line-height: 1.2;
 }
 
@@ -201,7 +201,7 @@
 }
 
 .episodeCard:hover .episodeArrow {
-    color: #a78bfa;
+    color: var(--accent);
     transform: translateX(3px);
 }
 
