@@ -56,7 +56,6 @@ class PodcastEpisodeResponse(BaseModel):
     script: Optional[str]
     audio_url: Optional[str]
     duration_seconds: Optional[int]
-    duration_seconds: Optional[int]
     slug: Optional[str]
     status: str
     
@@ -352,7 +351,6 @@ async def get_public_episode(
         episode_date=episode.episode_date,
         title=episode.title,
         script=episode.script if is_public else None,
-        audio_url=episode.audio_url if is_public else None,
         audio_url=episode.audio_url if is_public else None,
         duration_seconds=episode.duration_seconds if is_public else None,
         slug=episode.slug,
