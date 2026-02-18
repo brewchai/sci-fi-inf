@@ -129,3 +129,16 @@ export async function fetchPublicEpisodeBySlug(slug: string): Promise<PublicEpis
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }
+// Social Harvesting
+export interface SocialPost {
+    id: number;
+    content: string;
+    paper_title: string;
+    created_at: string;
+}
+
+export async function fetchHarvestedTweets(): Promise<SocialPost[]> {
+    const res = await fetch(`${API_URL}/social/harvest`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch tweets');
+    return res.json();
+}

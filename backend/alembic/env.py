@@ -16,6 +16,7 @@ from app.db.session import Base
 # Import all models so they register with Base.metadata
 from app.models.paper import Paper  # noqa
 from app.models.podcast import PodcastEpisode  # noqa
+from app.models.social import SocialPost  # noqa
 
 # this is the Alembic Config object
 config = context.config
