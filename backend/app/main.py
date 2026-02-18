@@ -46,7 +46,12 @@ def create_application() -> FastAPI:
     if "*" in settings.BACKEND_CORS_ORIGINS:
         origins = ["*"]
     else:
-        origins = ["http://localhost:3000"]
+        origins = [
+            "http://localhost:3000",
+            "https://www.theeurekafeed.com",
+            "https://theeurekafeed.com",
+            "https://sci-fi-inf-frontend.vercel.app"
+        ]
         if settings.BACKEND_CORS_ORIGINS:
             origins.extend(settings.BACKEND_CORS_ORIGINS)
     
