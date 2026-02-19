@@ -45,6 +45,15 @@ export default async function EpisodesPage() {
 
     try {
         episodes = await fetchPublicEpisodes();
+
+        // Limit to specific 3 samples as requested
+        const targetTitles = [
+            "AI Predicts Neurotoxicity from Molecular Clues",
+            "Unraveling Cosmic Mysteries: The UFO Forest Revealed",
+            "Unlocking High-Performance Solar Cells with 2D Seeds"
+        ];
+
+        episodes = episodes.filter(ep => targetTitles.includes(ep.title));
     } catch {
         // API might be down
     }
