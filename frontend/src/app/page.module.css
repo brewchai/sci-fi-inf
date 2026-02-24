@@ -265,6 +265,73 @@
     text-decoration: underline;
 }
 
+/* Episode-level CTAs (shown on landing page instead of paper links) */
+.episodeCtas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    margin-top: var(--space-xl);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--border);
+}
+
+.episodeCtaCard {
+    background: rgba(15, 15, 21, 0.50);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.episodeCtaCard h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.episodeCtaCard p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+    flex: 1;
+}
+
+.episodeCtaIcon {
+    color: var(--accent);
+}
+
+.episodeCtaButton {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+    width: fit-content;
+}
+
+.episodeCtaButton:hover {
+    opacity: 0.88;
+}
+
+@media (max-width: 640px) {
+    .episodeCtas {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Categories */
 .categories {
     padding: var(--space-4xl) var(--space-lg);

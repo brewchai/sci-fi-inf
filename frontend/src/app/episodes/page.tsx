@@ -124,6 +124,20 @@ export default async function EpisodesPage() {
                         </div>
                     )}
                 </section>
+                {/* Join CTA */}
+                <section className={styles.joinCta}>
+                    <div className={styles.joinCtaInner}>
+                        <Headphones size={36} className={styles.joinCtaIcon} />
+                        <h2>Want access to every episode?</h2>
+                        <p>
+                            These 3 samples are just a taste. Members get a fresh research briefing
+                            every morning — audio + full transcript, delivered daily.
+                        </p>
+                        <Link href="/login?signup=true" className={styles.joinCtaButton}>
+                            Join Free — Start Listening <ArrowRight size={18} />
+                        </Link>
+                    </div>
+                </section>
             </main>
             <Footer />
         </>

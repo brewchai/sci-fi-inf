@@ -243,6 +243,7 @@ export default async function LandingPage() {
                             <TranscriptSection
                                 transcript={latestEpisode.script || ''}
                                 papers={episodePapers}
+                                showPaperLinks={false}
                             />
                         </section>
                     )}
