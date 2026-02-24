@@ -1,3 +1,4 @@
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
     Sparkles,
@@ -14,6 +15,13 @@ import { HomeFAQItem } from '@/components/HomeFAQItem';
 import { faqs } from '@/lib/faqData';
 import { fetchLatestPodcast, fetchPapers } from '@/lib/api';
 import styles from './page.module.css';
+
+// LandingWrapper is a thin client boundary that mounts the full-page Vanta canvas
+// underneath all of the server-rendered content below.
+const LandingWrapper = nextDynamic(() => import('@/components/LandingWrapper'), {
+    ssr: false,
+    loading: () => <></>,
+});
 
 const categories = [
     { slug: 'ai_tech', emoji: '🤖', name: 'AI & Technology', desc: 'Machine learning, algorithms, computing' },
@@ -117,208 +125,210 @@ export default async function LandingPage() {
         <>
             <JsonLd />
             <Header />
-            <main className={styles.main}>
-                {/* Hero */}
-                <section className={styles.hero}>
-                    <div className={styles.heroContent}>
-                        <div className={styles.heroEyebrow}>
-                            <Sparkles size={16} />
-                            Science, simplified
-                        </div>
-                        <h1 className={styles.heroTitle}>
-                            Fresh research,<br />
-                            <span className={styles.heroTitleAccent}>delivered daily.</span>
-                        </h1>
-                        <p className={styles.heroSubtitle}>
-                            Every morning, the latest academic papers—explained for curious minds
-                            in just 3 minutes. Stay ahead without the PhD.
-                        </p>
-                        <div className={styles.heroActions}>
-                            <a href="#start-listening" className="btn btn-primary btn-large">
-                                Start Listening <ArrowRight size={18} />
-                            </a>
-                            <a href="#how-it-works" className="btn btn-secondary btn-large">
-                                See How It Works
-                            </a>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Stats */}
-                <section className={styles.stats}>
-                    <div className={styles.statsGrid}>
-                        <div className={styles.stat}>
-                            <div className={styles.statNumber}>4K+</div>
-                            <div className={styles.statLabel}>Papers scanned weekly</div>
-                        </div>
-                        <div className={styles.stat}>
-                            <div className={styles.statNumber}>12</div>
-                            <div className={styles.statLabel}>Research categories</div>
-                        </div>
-                        <div className={styles.stat}>
-                            <div className={styles.statNumber}>3 min</div>
-                            <div className={styles.statLabel}>Daily listen time</div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* How It Works */}
-                <section className={styles.howItWorks} id="how-it-works">
-                    <div className={styles.sectionHeader}>
-                        <h2>How It Works</h2>
-                        <p>From academic journals to your inbox—without the jargon.</p>
-                    </div>
-
-                    <div className={styles.stepsGrid}>
-                        <div className={styles.step}>
-                            <div className={styles.stepIcon}>
-                                <Newspaper size={28} />
+            <LandingWrapper>
+                <main className={styles.main}>
+                    {/* Hero */}
+                    <section className={styles.hero}>
+                        <div className={styles.heroContent}>
+                            <div className={styles.heroEyebrow}>
+                                <Sparkles size={16} />
+                                Science, simplified
                             </div>
-                            <div className={styles.stepNumber}>Step 01</div>
-                            <h3>We Harvest</h3>
-                            <p>
-                                Every week, we scan thousands of newly published research papers
-                                to find what&apos;s genuinely new and noteworthy.
+                            <h1 className={styles.heroTitle}>
+                                Fresh research,<br />
+                                <span className={styles.heroTitleAccent}>delivered daily.</span>
+                            </h1>
+                            <p className={styles.heroSubtitle}>
+                                Every morning, the latest academic papers—explained for curious minds
+                                in just 3 minutes. Stay ahead without the PhD.
                             </p>
-                        </div>
-
-                        <div className={styles.step}>
-                            <div className={styles.stepIcon}>
-                                <Filter size={28} />
+                            <div className={styles.heroActions}>
+                                <a href="#start-listening" className="btn btn-primary btn-large">
+                                    Start Listening <ArrowRight size={18} />
+                                </a>
+                                <a href="#how-it-works" className="btn btn-secondary btn-large">
+                                    See How It Works
+                                </a>
                             </div>
-                            <div className={styles.stepNumber}>Step 02</div>
-                            <h3>We Curate</h3>
-                            <p>
-                                We rank papers by impact, relevance, and novelty—so you only see
-                                research that actually matters, not obscure footnotes.
-                            </p>
                         </div>
-
-                        <div className={styles.step}>
-                            <div className={styles.stepIcon}>
-                                <Brain size={28} />
-                            </div>
-                            <div className={styles.stepNumber}>Step 03</div>
-                            <h3>We Deliver</h3>
-                            <p>
-                                Every morning, you get a crisp 3-minute podcast briefing—research
-                                breakthroughs explained for the well-informed, not specialists.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className={styles.nerdyFact}>
-                        <div className={styles.nerdyFactLabel}>🤓 Nerdy Fact</div>
-                        <p>
-                            Over 3 million new research papers are published every year.
-                            That&apos;s 8,200 per day. Nobody can keep up—so we built this
-                            to help you punch above your weight.
-                        </p>
-                    </div>
-                </section>
-
-                {latestEpisode && (
-                    <section className={styles.sampleEpisode} id="listen">
-                        <div className={styles.sectionHeader}>
-                            <h2>Hear It For Yourself</h2>
-                            <p>A 3-minute briefing from today&apos;s research.</p>
-                        </div>
-
-                        {latestEpisode.audio_url && (
-                            <AudioPlayer
-                                src={latestEpisode.audio_url}
-                                title={latestEpisode.title}
-                            />
-                        )}
-
-                        <TranscriptSection
-                            transcript={latestEpisode.script || ''}
-                            papers={episodePapers}
-                        />
                     </section>
-                )}
 
-                {/* Categories */}
-                <section className={styles.categories} id="categories">
-                    <div className={styles.sectionHeader}>
-                        <h2>Topics We Cover</h2>
-                        <p>We curate the best research from across these fields—so you don&apos;t have to.</p>
-                    </div>
-
-                    <div className={styles.categoriesGrid}>
-                        {categories.map((cat) => (
-                            <div key={cat.slug} className={styles.categoryCard}>
-                                <div className={styles.categoryEmoji}>{cat.emoji}</div>
-                                <h4>{cat.name}</h4>
-                                <p>{cat.desc}</p>
+                    {/* Stats */}
+                    <section className={styles.stats}>
+                        <div className={styles.statsGrid}>
+                            <div className={styles.stat}>
+                                <div className={styles.statNumber}>4K+</div>
+                                <div className={styles.statLabel}>Papers scanned weekly</div>
                             </div>
-                        ))}
-                    </div>
-                </section>
+                            <div className={styles.stat}>
+                                <div className={styles.statNumber}>12</div>
+                                <div className={styles.statLabel}>Research categories</div>
+                            </div>
+                            <div className={styles.stat}>
+                                <div className={styles.statNumber}>3 min</div>
+                                <div className={styles.statLabel}>Daily listen time</div>
+                            </div>
+                        </div>
+                    </section>
 
-                {/* Why Now */}
-                <section className={styles.whyNow}>
-                    <div className={styles.whyNowContent}>
-                        <h2>Why This Matters Now</h2>
-                        <p>
-                            Science moves fast. Breakthroughs in AI, medicine, and climate
-                            happen weekly—but most people only hear about them months later,
-                            filtered through sensationalized headlines.
-                        </p>
-                        <p>
-                            We believe being scientifically literate shouldn&apos;t require a
-                            subscription to Nature. It shouldn&apos;t require deciphering 30-page
-                            papers written for specialists. It should be accessible, digestible,
-                            and—dare we say—enjoyable.
-                        </p>
-                        <p>
-                            <strong style={{ color: 'var(--text-primary)' }}>
-                                The Eureka Feed is for curious minds who want to understand
-                                the world through the lens of evidence.
-                            </strong>
-                        </p>
-                        <Link href="/login?signup=true" className="btn btn-primary btn-large">
-                            Join The Eureka Feed <ArrowRight size={18} />
-                        </Link>
-                    </div>
-                </section>
+                    {/* How It Works */}
+                    <section className={styles.howItWorks} id="how-it-works">
+                        <div className={styles.sectionHeader}>
+                            <h2>How It Works</h2>
+                            <p>From academic journals to your inbox—without the jargon.</p>
+                        </div>
 
-                {/* Start Listening */}
-                <section className={styles.pricing} id="start-listening">
-                    <div className={styles.sectionHeader}>
-                        <h2>Start Listening Today</h2>
-                        <p>No credit card required.</p>
-                    </div>
+                        <div className={styles.stepsGrid}>
+                            <div className={styles.step}>
+                                <div className={styles.stepIcon}>
+                                    <Newspaper size={28} />
+                                </div>
+                                <div className={styles.stepNumber}>Step 01</div>
+                                <h3>We Harvest</h3>
+                                <p>
+                                    Every week, we scan thousands of newly published research papers
+                                    to find what&apos;s genuinely new and noteworthy.
+                                </p>
+                            </div>
 
-                    <div className={styles.waitlistCard}>
-                        <div className={styles.startListeningContent}>
-                            <p className={styles.freeNotice}>
-                                🎧 Create a free account and get instant access to all episodes.
+                            <div className={styles.step}>
+                                <div className={styles.stepIcon}>
+                                    <Filter size={28} />
+                                </div>
+                                <div className={styles.stepNumber}>Step 02</div>
+                                <h3>We Curate</h3>
+                                <p>
+                                    We rank papers by impact, relevance, and novelty—so you only see
+                                    research that actually matters, not obscure footnotes.
+                                </p>
+                            </div>
+
+                            <div className={styles.step}>
+                                <div className={styles.stepIcon}>
+                                    <Brain size={28} />
+                                </div>
+                                <div className={styles.stepNumber}>Step 03</div>
+                                <h3>We Deliver</h3>
+                                <p>
+                                    Every morning, you get a crisp 3-minute podcast briefing—research
+                                    breakthroughs explained for the well-informed, not specialists.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className={styles.nerdyFact}>
+                            <div className={styles.nerdyFactLabel}>🤓 Nerdy Fact</div>
+                            <p>
+                                Over 3 million new research papers are published every year.
+                                That&apos;s 8,200 per day. Nobody can keep up—so we built this
+                                to help you punch above your weight.
+                            </p>
+                        </div>
+                    </section>
+
+                    {latestEpisode && (
+                        <section className={styles.sampleEpisode} id="listen">
+                            <div className={styles.sectionHeader}>
+                                <h2>Hear It For Yourself</h2>
+                                <p>A 3-minute briefing from today&apos;s research.</p>
+                            </div>
+
+                            {latestEpisode.audio_url && (
+                                <AudioPlayer
+                                    src={latestEpisode.audio_url}
+                                    title={latestEpisode.title}
+                                />
+                            )}
+
+                            <TranscriptSection
+                                transcript={latestEpisode.script || ''}
+                                papers={episodePapers}
+                            />
+                        </section>
+                    )}
+
+                    {/* Categories */}
+                    <section className={styles.categories} id="categories">
+                        <div className={styles.sectionHeader}>
+                            <h2>Topics We Cover</h2>
+                            <p>We curate the best research from across these fields—so you don&apos;t have to.</p>
+                        </div>
+
+                        <div className={styles.categoriesGrid}>
+                            {categories.map((cat) => (
+                                <div key={cat.slug} className={styles.categoryCard}>
+                                    <div className={styles.categoryEmoji}>{cat.emoji}</div>
+                                    <h4>{cat.name}</h4>
+                                    <p>{cat.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* Why Now */}
+                    <section className={styles.whyNow}>
+                        <div className={styles.whyNowContent}>
+                            <h2>Why This Matters Now</h2>
+                            <p>
+                                Science moves fast. Breakthroughs in AI, medicine, and climate
+                                happen weekly—but most people only hear about them months later,
+                                filtered through sensationalized headlines.
+                            </p>
+                            <p>
+                                We believe being scientifically literate shouldn&apos;t require a
+                                subscription to Nature. It shouldn&apos;t require deciphering 30-page
+                                papers written for specialists. It should be accessible, digestible,
+                                and—dare we say—enjoyable.
+                            </p>
+                            <p>
+                                <strong style={{ color: 'var(--text-primary)' }}>
+                                    The Eureka Feed is for curious minds who want to understand
+                                    the world through the lens of evidence.
+                                </strong>
                             </p>
                             <Link href="/login?signup=true" className="btn btn-primary btn-large">
-                                Create Account <ArrowRight size={18} />
+                                Join The Eureka Feed <ArrowRight size={18} />
                             </Link>
-                            <p className={styles.signInNote}>
-                                Already have an account? <Link href="/login">Sign in</Link>
-                            </p>
                         </div>
-                    </div>
-                </section>
+                    </section>
 
-                {/* FAQ */}
-                <section className={styles.faq} id="faq">
-                    <div className={styles.sectionHeader}>
-                        <h2>Frequently Asked Questions</h2>
-                        <p>Everything you need to know about The Eureka Feed.</p>
-                    </div>
+                    {/* Start Listening */}
+                    <section className={styles.pricing} id="start-listening">
+                        <div className={styles.sectionHeader}>
+                            <h2>Start Listening Today</h2>
+                            <p>No credit card required.</p>
+                        </div>
 
-                    <div className={styles.faqList}>
-                        {faqs.map((faq, i) => (
-                            <HomeFAQItem key={i} question={faq.question} answer={faq.answer} />
-                        ))}
-                    </div>
-                </section>
-            </main>
+                        <div className={styles.waitlistCard}>
+                            <div className={styles.startListeningContent}>
+                                <p className={styles.freeNotice}>
+                                    🎧 Create a free account and get instant access to all episodes.
+                                </p>
+                                <Link href="/login?signup=true" className="btn btn-primary btn-large">
+                                    Create Account <ArrowRight size={18} />
+                                </Link>
+                                <p className={styles.signInNote}>
+                                    Already have an account? <Link href="/login">Sign in</Link>
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* FAQ */}
+                    <section className={styles.faq} id="faq">
+                        <div className={styles.sectionHeader}>
+                            <h2>Frequently Asked Questions</h2>
+                            <p>Everything you need to know about The Eureka Feed.</p>
+                        </div>
+
+                        <div className={styles.faqList}>
+                            {faqs.map((faq, i) => (
+                                <HomeFAQItem key={i} question={faq.question} answer={faq.answer} />
+                            ))}
+                        </div>
+                    </section>
+                </main>
+            </LandingWrapper>
             <Footer />
         </>
     );

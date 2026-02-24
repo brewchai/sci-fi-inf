@@ -21,6 +21,7 @@ export function Footer() {
                 <div className={styles.footerColumn}>
                     <h4>Support</h4>
                     <ul className={styles.footerLinks}>
+                        <li><a href="/mission">Our Mission</a></li>
                         <li><a href="/contact">Contact Us</a></li>
                     </ul>
                 </div>

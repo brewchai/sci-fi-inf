@@ -1,0 +1,169 @@
+.missionPage {
+    padding-top: var(--header-height);
+    color: var(--text-primary);
+}
+
+.vantaPlaceholder {
+    min-height: 100vh;
+    background: var(--bg-primary);
+}
+
+.hero {
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-4xl) var(--space-lg);
+}
+
+.heroContent {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.heroEyebrow {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: var(--space-lg);
+    display: block;
+}
+
+.heroTitle {
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    line-height: 1.1;
+    margin-bottom: var(--space-xl);
+    background: linear-gradient(to bottom, #fff, #888);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.heroSubtitle {
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
+    color: var(--text-secondary);
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+.section {
+    padding: var(--space-4xl) var(--space-lg);
+    max-width: var(--max-width);
+    margin: 0 auto;
+}
+
+.glassCard {
+    background: rgba(26, 26, 38, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-xl);
+    padding: var(--space-3xl);
+    margin-bottom: var(--space-3xl);
+}
+
+.sectionTitle {
+    color: var(--accent);
+    margin-bottom: var(--space-xl);
+    font-size: 2.25rem;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3xl);
+    align-items: start;
+}
+
+.contentBlock h3 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+}
+
+.contentBlock p {
+    font-size: 1.125rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.quoteSection {
+    text-align: center;
+    padding: var(--space-4xl) 0;
+}
+
+.quote {
+    font-family: var(--font-serif);
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    font-style: italic;
+    color: var(--text-primary);
+    max-width: 800px;
+    margin: 0 auto;
+    line-height: 1.4;
+}
+
+.quoteAuthor {
+    display: block;
+    margin-top: var(--space-xl);
+    font-size: 1.125rem;
+    font-family: var(--font-sans);
+    font-style: normal;
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.pillarsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-xl);
+    margin-top: var(--space-3xl);
+}
+
+.pillar {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    transition: all 0.3s ease;
+}
+
+.pillar:hover {
+    background: rgba(212, 168, 83, 0.03);
+    border-color: rgba(212, 168, 83, 0.2);
+    transform: translateY(-5px);
+}
+
+.pillarIcon {
+    color: var(--accent);
+    margin-bottom: var(--space-md);
+}
+
+.pillar h4 {
+    margin-bottom: var(--space-sm);
+}
+
+.ctaSection {
+    text-align: center;
+    padding: var(--space-4xl) 0;
+}
+
+@media (max-width: 768px) {
+
+    .grid,
+    .pillarsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero {
+        padding-top: var(--space-3xl);
+    }
+
+    .glassCard {
+        padding: var(--space-xl);
+    }
+}

@@ -10,7 +10,6 @@
     justify-content: center;
     text-align: center;
     padding: var(--space-4xl) var(--space-lg);
-    background: radial-gradient(ellipse at top, rgba(212, 168, 83, 0.08) 0%, transparent 50%);
 }
 
 .heroContent {
@@ -54,9 +53,11 @@
 
 /* Stats Bar */
 .stats {
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
+    background: rgba(15, 15, 21, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     padding: var(--space-xl) var(--space-lg);
 }
 
@@ -112,6 +113,11 @@
 .step {
     text-align: center;
     padding: var(--space-xl);
+    background: rgba(15, 15, 21, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-xl);
 }
 
 .stepIcon {
@@ -170,7 +176,9 @@
 /* Sample Episode */
 .sampleEpisode {
     padding: var(--space-4xl) var(--space-lg);
-    background: var(--bg-secondary);
+    background: rgba(15, 15, 21, 0.50);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
 
 .transcript {
@@ -260,7 +268,6 @@
 /* Categories */
 .categories {
     padding: var(--space-4xl) var(--space-lg);
-    background: var(--bg-secondary);
 }
 
 .categoriesGrid {
@@ -272,8 +279,10 @@
 }
 
 .categoryCard {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    background: rgba(15, 15, 21, 0.50);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius-md);
     padding: var(--space-lg);
     transition: all 0.2s ease;
@@ -524,7 +533,6 @@
 /* Why Now */
 .whyNow {
     padding: var(--space-4xl) var(--space-lg);
-    background: var(--bg-secondary);
 }
 
 .whyNowContent {
