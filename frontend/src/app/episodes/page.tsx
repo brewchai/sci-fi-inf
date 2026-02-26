@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowRight, Headphones, FileText, Lock } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { GuestOnly } from '@/components/GuestOnly';
 import { fetchPublicEpisodes } from '@/lib/api';
 import styles from './page.module.css';
 
@@ -70,19 +71,21 @@ export default async function EpisodesPage() {
                     </p>
                 </section>
 
-                {/* New Episodes CTA */}
-                <section className={styles.ctaBanner}>
-                    <div className={styles.ctaContent}>
-                        <div className={styles.ctaIcon}><Lock size={20} /></div>
-                        <div className={styles.ctaText}>
-                            <strong>Want today&apos;s episode?</strong>
-                            <span>The latest episodes are available exclusively to members. Sign up free to listen.</span>
+                {/* New Episodes CTA — only for guests */}
+                <GuestOnly>
+                    <section className={styles.ctaBanner}>
+                        <div className={styles.ctaContent}>
+                            <div className={styles.ctaIcon}><Lock size={20} /></div>
+                            <div className={styles.ctaText}>
+                                <strong>Want today&apos;s episode?</strong>
+                                <span>The latest episodes are available exclusively to members. Sign up free to listen.</span>
+                            </div>
+                            <Link href="/login" className={styles.ctaButton}>
+                                Get Access <ArrowRight size={16} />
+                            </Link>
                         </div>
-                        <Link href="/login" className={styles.ctaButton}>
-                            Get Access <ArrowRight size={16} />
-                        </Link>
-                    </div>
-                </section>
+                    </section>
+                </GuestOnly>
 
                 {/* Episode List */}
                 <section className={styles.archiveSection}>
@@ -124,20 +127,22 @@ export default async function EpisodesPage() {
                         </div>
                     )}
                 </section>
-                {/* Join CTA */}
-                <section className={styles.joinCta}>
-                    <div className={styles.joinCtaInner}>
-                        <Headphones size={36} className={styles.joinCtaIcon} />
-                        <h2>Want access to every episode?</h2>
-                        <p>
-                            These 3 samples are just a taste. Members get a fresh research briefing
-                            every morning — audio + full transcript, delivered daily.
-                        </p>
-                        <Link href="/login?signup=true" className={styles.joinCtaButton}>
-                            Join Free — Start Listening <ArrowRight size={18} />
-                        </Link>
-                    </div>
-                </section>
+                {/* Join CTA — only for guests */}
+                <GuestOnly>
+                    <section className={styles.joinCta}>
+                        <div className={styles.joinCtaInner}>
+                            <Headphones size={36} className={styles.joinCtaIcon} />
+                            <h2>Want access to every episode?</h2>
+                            <p>
+                                These 3 samples are just a taste. Members get a fresh research briefing
+                                every morning — audio + full transcript, delivered daily.
+                            </p>
+                            <Link href="/login?signup=true" className={styles.joinCtaButton}>
+                                Join Free — Start Listening <ArrowRight size={18} />
+                            </Link>
+                        </div>
+                    </section>
+                </GuestOnly>
             </main>
             <Footer />
         </>

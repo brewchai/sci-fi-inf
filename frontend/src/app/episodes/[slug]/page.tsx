@@ -49,6 +49,7 @@ export default function EpisodePage() {
     const [episode, setEpisode] = useState<EpisodeData | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -58,17 +59,18 @@ export default function EpisodePage() {
             const isDate = /^\d{4}-\d{2}-\d{2}$/.test(slug);
 
             // Step 1: Check if user is logged in
-            let isLoggedIn = false;
+            let loggedIn = false;
             try {
                 const supabase = getSupabase();
                 const { data: { user } } = await supabase.auth.getUser();
-                isLoggedIn = !!user;
+                loggedIn = !!user;
+                if (!cancelled) setIsLoggedIn(loggedIn);
             } catch {
                 // Not logged in
             }
 
             // Step 2: If logged in, fetch full episode via authenticated endpoint
-            if (isLoggedIn && !isDate) {
+            if (loggedIn && !isDate) {
                 try {
                     const fullEpisode: PodcastEpisode = await fetchEpisodeBySlug(slug);
                     if (!cancelled) {
@@ -246,24 +248,26 @@ export default function EpisodePage() {
                         </div>
                     )}
 
-                    <div className={styles.ctaSection}>
-                        <div className={styles.ctaCard}>
-                            <BookOpen size={24} className={styles.ctaIcon} />
-                            <h3>Read the source papers</h3>
-                            <p>Sign up to access the original research papers discussed in this episode, with direct links and summaries.</p>
-                            <Link href="/login" className={styles.ctaButton}>
-                                Sign Up Free <ArrowRight size={16} />
-                            </Link>
+                    {!isLoggedIn && (
+                        <div className={styles.ctaSection}>
+                            <div className={styles.ctaCard}>
+                                <BookOpen size={24} className={styles.ctaIcon} />
+                                <h3>Read the source papers</h3>
+                                <p>Sign up to access the original research papers discussed in this episode, with direct links and summaries.</p>
+                                <Link href="/login" className={styles.ctaButton}>
+                                    Sign Up Free <ArrowRight size={16} />
+                                </Link>
+                            </div>
+                            <div className={styles.ctaCard}>
+                                <Headphones size={24} className={styles.ctaIcon} />
+                                <h3>Get today&apos;s episode</h3>
+                                <p>Members get new episodes every morning — the latest research delivered before your first coffee.</p>
+                                <Link href="/login" className={styles.ctaButton}>
+                                    Start Listening <ArrowRight size={16} />
+                                </Link>
+                            </div>
                         </div>
-                        <div className={styles.ctaCard}>
-                            <Headphones size={24} className={styles.ctaIcon} />
-                            <h3>Get today&apos;s episode</h3>
-                            <p>Members get new episodes every morning — the latest research delivered before your first coffee.</p>
-                            <Link href="/login" className={styles.ctaButton}>
-                                Start Listening <ArrowRight size={16} />
-                            </Link>
-                        </div>
-                    </div>
+                    )}
 
                     <Link href="/episodes" className={styles.archiveLink}>
                         <ArrowLeft size={16} />
