@@ -24,6 +24,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from app.db.session import SessionLocal
 from app.models.author_email import AuthorEmail
+from app.models.paper import Paper  # noqa: F401 — needed for ORM relationship resolution
+from app.models.podcast import PodcastEpisode  # noqa: F401
 from app.core.config import settings
 
 
@@ -257,8 +259,9 @@ async def send_emails(dry_run: bool = False, limit: Optional[int] = None):
             try:
                 # Send via Resend
                 params = {
-                    "from_": settings.EMAIL_FROM,
+                    "from": settings.EMAIL_FROM,
                     "to": [record.email_address],
+                    "bcc": ["ninad.mundalik@gmail.com"],
                     "subject": subject,
                     "html": html_body,
                     "text": text_body,

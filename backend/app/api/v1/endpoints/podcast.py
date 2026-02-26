@@ -462,3 +462,154 @@ async def get_episode_by_date(
         raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
     
     return PodcastEpisodeResponse.model_validate(episode)
+
+
+# =============================================================================
+# RSS Feed for Apple Podcasts / Spotify
+# =============================================================================
+
+from fastapi.responses import Response
+from xml.etree.ElementTree import Element, SubElement, tostring, register_namespace
+from email.utils import format_datetime
+from datetime import datetime, timezone
+
+
+PODCAST_TITLE = "The Eureka Feed"
+PODCAST_DESCRIPTION = (
+    "Cutting-edge academic research distilled into 3-minute daily audio briefings. "
+    "Every morning, we transform the latest scientific papers into accessible, "
+    "engaging summaries — from quantum physics to climate science, AI to biology. "
+    "Perfect for the curious mind on the go."
+)
+PODCAST_AUTHOR = "The Eureka Feed"
+PODCAST_EMAIL = "ninad.mundalik@gmail.com"
+PODCAST_SITE = "https://www.theeurekafeed.com"
+PODCAST_COVER = "https://qdkooqoknppsulbiwxbn.supabase.co/storage/v1/object/public/podcast-audio/podcast_cover.png"
+PODCAST_LANGUAGE = "en"
+PODCAST_CATEGORY = "Science"
+PODCAST_SUBCATEGORY = "Nature"
+
+
+@router.get(
+    "/feed.xml",
+    summary="Podcast RSS feed for Apple Podcasts, Spotify, etc.",
+    response_class=Response,
+)
+async def podcast_rss_feed(
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Generate a valid podcast RSS feed with iTunes extensions."""
+    min_date = date(2026, 1, 20)
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.status == "ready")
+        .where(PodcastEpisode.audio_url.isnot(None))
+        .where(PodcastEpisode.episode_date >= min_date)
+        .order_by(desc(PodcastEpisode.episode_date))
+        .limit(200)
+    )
+    episodes = result.scalars().all()
+
+    # Build XML
+    ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
+    ATOM_NS = "http://www.w3.org/2005/Atom"
+    CONTENT_NS = "http://purl.org/rss/1.0/modules/content/"
+
+    register_namespace("itunes", ITUNES_NS)
+    register_namespace("atom", ATOM_NS)
+    register_namespace("content", CONTENT_NS)
+
+    rss = Element("rss", {
+        "version": "2.0",
+    })
+    channel = SubElement(rss, "channel")
+
+    # Channel metadata
+    SubElement(channel, "title").text = PODCAST_TITLE
+    SubElement(channel, "link").text = PODCAST_SITE
+    SubElement(channel, "description").text = PODCAST_DESCRIPTION
+    SubElement(channel, "language").text = PODCAST_LANGUAGE
+    SubElement(channel, "copyright").text = f"© 2026 {PODCAST_AUTHOR}"
+
+    # Last build date
+    if episodes:
+        ep_dt = datetime.combine(episodes[0].episode_date, datetime.min.time(), tzinfo=timezone.utc)
+        SubElement(channel, "lastBuildDate").text = format_datetime(ep_dt)
+
+    # Atom self link
+    SubElement(channel, f"{{{ATOM_NS}}}link", {
+        "href": f"{PODCAST_SITE}/api/v1/podcast/feed.xml",
+        "rel": "self",
+        "type": "application/rss+xml",
+    })
+
+    # iTunes tags
+    SubElement(channel, f"{{{ITUNES_NS}}}author").text = PODCAST_AUTHOR
+    SubElement(channel, f"{{{ITUNES_NS}}}summary").text = PODCAST_DESCRIPTION
+    SubElement(channel, f"{{{ITUNES_NS}}}type").text = "episodic"
+    SubElement(channel, f"{{{ITUNES_NS}}}explicit").text = "false"
+    SubElement(channel, f"{{{ITUNES_NS}}}image", {"href": PODCAST_COVER})
+
+    owner = SubElement(channel, f"{{{ITUNES_NS}}}owner")
+    SubElement(owner, f"{{{ITUNES_NS}}}name").text = PODCAST_AUTHOR
+    SubElement(owner, f"{{{ITUNES_NS}}}email").text = PODCAST_EMAIL
+
+    category = SubElement(channel, f"{{{ITUNES_NS}}}category", {"text": PODCAST_CATEGORY})
+    SubElement(category, f"{{{ITUNES_NS}}}category", {"text": PODCAST_SUBCATEGORY})
+
+    # Image (standard RSS)
+    image = SubElement(channel, "image")
+    SubElement(image, "url").text = PODCAST_COVER
+    SubElement(image, "title").text = PODCAST_TITLE
+    SubElement(image, "link").text = PODCAST_SITE
+
+    # Episodes
+    for ep in episodes:
+        item = SubElement(channel, "item")
+        SubElement(item, "title").text = ep.title
+
+        ep_url = f"{PODCAST_SITE}/episodes/{ep.slug}" if ep.slug else PODCAST_SITE
+        SubElement(item, "link").text = ep_url
+
+        # Description — first 2 paragraphs of transcript
+        description = ""
+        if ep.script:
+            paragraphs = [p.strip() for p in ep.script.split("\n") if p.strip()]
+            description = " ".join(paragraphs[:3])
+            if len(paragraphs) > 3:
+                description += "..."
+        SubElement(item, "description").text = description or ep.title
+
+        # GUID
+        SubElement(item, "guid", {"isPermaLink": "false"}).text = f"eurekafeed-ep-{ep.id}"
+
+        # Pub date
+        ep_datetime = datetime.combine(ep.episode_date, datetime.min.time(), tzinfo=timezone.utc)
+        SubElement(item, "pubDate").text = format_datetime(ep_datetime)
+
+        # Audio enclosure
+        SubElement(item, "enclosure", {
+            "url": ep.audio_url,
+            "type": "audio/mpeg",
+            "length": str((ep.duration_seconds or 180) * 16000),  # rough byte estimate
+        })
+
+        # iTunes episode tags
+        SubElement(item, f"{{{ITUNES_NS}}}title").text = ep.title
+        SubElement(item, f"{{{ITUNES_NS}}}summary").text = description or ep.title
+        SubElement(item, f"{{{ITUNES_NS}}}explicit").text = "false"
+        SubElement(item, f"{{{ITUNES_NS}}}episodeType").text = "full"
+
+        if ep.duration_seconds:
+            mins = ep.duration_seconds // 60
+            secs = ep.duration_seconds % 60
+            SubElement(item, f"{{{ITUNES_NS}}}duration").text = f"{mins}:{secs:02d}"
+
+    # Serialize
+    xml_bytes = b'<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(rss, encoding="unicode").encode("utf-8")
+
+    return Response(
+        content=xml_bytes,
+        media_type="application/rss+xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=1800"},  # 30 min cache
+    )
