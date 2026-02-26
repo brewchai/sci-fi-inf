@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "https://sci-fi-inf-backend.onrender.com/api/v1/:path*"
+      "destination": "https://sci-fi-inf-production.up.railway.app/api/v1/:path*"
     }
   ]
 }

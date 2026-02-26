@@ -419,53 +419,8 @@ async def get_episode_by_slug(
 
 
 # =============================================================================
-# ID/Date Lookup Endpoints (these use path params, must come AFTER /public)
-# =============================================================================
-
-@router.get(
-    "/{episode_id}",
-    response_model=PodcastEpisodeResponse,
-    summary="Get a podcast episode by ID",
-)
-async def get_episode(
-    episode_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> PodcastEpisodeResponse:
-    """Get a specific podcast episode by its ID."""
-    result = await db.execute(
-        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
-    )
-    episode = result.scalar_one_or_none()
-    
-    if not episode:
-        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
-    
-    return PodcastEpisodeResponse.model_validate(episode)
-
-
-@router.get(
-    "/by-date/{episode_date}",
-    response_model=PodcastEpisodeResponse,
-    summary="Get a podcast episode by date",
-)
-async def get_episode_by_date(
-    episode_date: date,
-    db: AsyncSession = Depends(get_db),
-) -> PodcastEpisodeResponse:
-    """Get the podcast episode for a specific date."""
-    result = await db.execute(
-        select(PodcastEpisode).where(PodcastEpisode.episode_date == episode_date)
-    )
-    episode = result.scalar_one_or_none()
-    
-    if not episode:
-        raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
-    
-    return PodcastEpisodeResponse.model_validate(episode)
-
-
-# =============================================================================
 # RSS Feed for Apple Podcasts / Spotify
+# IMPORTANT: Must come BEFORE /{episode_id} to avoid route conflicts
 # =============================================================================
 
 from fastapi.responses import Response
@@ -571,7 +526,7 @@ async def podcast_rss_feed(
         ep_url = f"{PODCAST_SITE}/episodes/{ep.slug}" if ep.slug else PODCAST_SITE
         SubElement(item, "link").text = ep_url
 
-        # Description — first 2 paragraphs of transcript
+        # Description — first 3 paragraphs of transcript
         description = ""
         if ep.script:
             paragraphs = [p.strip() for p in ep.script.split("\n") if p.strip()]
@@ -591,7 +546,7 @@ async def podcast_rss_feed(
         SubElement(item, "enclosure", {
             "url": ep.audio_url,
             "type": "audio/mpeg",
-            "length": str((ep.duration_seconds or 180) * 16000),  # rough byte estimate
+            "length": str((ep.duration_seconds or 180) * 16000),
         })
 
         # iTunes episode tags
@@ -611,5 +566,51 @@ async def podcast_rss_feed(
     return Response(
         content=xml_bytes,
         media_type="application/rss+xml; charset=utf-8",
-        headers={"Cache-Control": "public, max-age=1800"},  # 30 min cache
+        headers={"Cache-Control": "public, max-age=1800"},
     )
+
+
+# =============================================================================
+# ID/Date Lookup Endpoints (these use path params, must come AFTER /public)
+# =============================================================================
+
+@router.get(
+    "/{episode_id}",
+    response_model=PodcastEpisodeResponse,
+    summary="Get a podcast episode by ID",
+)
+async def get_episode(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> PodcastEpisodeResponse:
+    """Get a specific podcast episode by its ID."""
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+    
+    return PodcastEpisodeResponse.model_validate(episode)
+
+
+@router.get(
+    "/by-date/{episode_date}",
+    response_model=PodcastEpisodeResponse,
+    summary="Get a podcast episode by date",
+)
+async def get_episode_by_date(
+    episode_date: date,
+    db: AsyncSession = Depends(get_db),
+) -> PodcastEpisodeResponse:
+    """Get the podcast episode for a specific date."""
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.episode_date == episode_date)
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"No episode found for {episode_date}")
+    
+    return PodcastEpisodeResponse.model_validate(episode)
