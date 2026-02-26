@@ -240,10 +240,17 @@ export default function FeedPage() {
         loadInitialData();
     }, [checkingProfile, profile]);
 
-    // Load episode when date is clicked (lazy loading)
+    // Load episode when date is clicked
     const handleDateClick = async (dateItem: EpisodeDate) => {
         if (dateItem.id === selectedDateId) return; // Already selected
 
+        // If the episode has a slug, navigate to its dedicated page
+        if (dateItem.slug) {
+            router.push(`/episodes/${dateItem.slug}`);
+            return;
+        }
+
+        // Fallback: load inline if no slug
         setLoadingEpisode(true);
         setSelectedDateId(dateItem.id);
         setShowTranscript(false);

@@ -38,6 +38,7 @@ export type EpisodeDate = {
     episode_date: string;
     title: string;
     duration_seconds: number | null;
+    slug: string | null;
 };
 
 export async function fetchCategories(): Promise<Category[]> {
@@ -96,6 +97,12 @@ export async function fetchEpisodeDates(limit: number = 30): Promise<EpisodeDate
 
 export async function fetchEpisodeById(id: number): Promise<PodcastEpisode> {
     const res = await fetch(`${API_URL}/podcast/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch episode');
+    return res.json();
+}
+
+export async function fetchEpisodeBySlug(slug: string): Promise<PodcastEpisode> {
+    const res = await fetch(`${API_URL}/podcast/by-slug/${slug}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }

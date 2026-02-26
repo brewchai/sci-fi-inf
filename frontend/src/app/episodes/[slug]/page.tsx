@@ -1,14 +1,20 @@
-import type { Metadata } from 'next';
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Lock, ArrowLeft, BookOpen, Headphones } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { ArrowRight, Lock, ArrowLeft, BookOpen, Headphones, Loader2 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-import { fetchPublicEpisodeBySlug, fetchPublicEpisodeByDate } from '@/lib/api';
+import {
+    fetchPublicEpisodeBySlug,
+    fetchPublicEpisodeByDate,
+    fetchEpisodeBySlug,
+    PublicEpisode,
+    PodcastEpisode,
+} from '@/lib/api';
+import { getSupabase } from '@/lib/supabase';
 import styles from './page.module.css';
-
-type Props = {
-    params: { slug: string };
-};
 
 function formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
@@ -27,89 +33,109 @@ function formatDuration(seconds: number | null): string {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-    const { slug } = params;
-
-    try {
-        const episode = await fetchPublicEpisodeBySlug(slug);
-        const formattedDate = formatDate(episode.episode_date);
-
-        return {
-            title: episode.title,
-            description: `Listen to The Eureka Feed for ${formattedDate} — the latest academic research explained in 3 minutes. Full transcript included.`,
-            openGraph: {
-                title: episode.title,
-                description: `The Eureka Feed — ${formattedDate}. Daily science research podcast with full transcript.`,
-                url: `https://www.theeurekafeed.com/episodes/${slug}`,
-                type: 'article',
-            },
-            alternates: {
-                canonical: `https://www.theeurekafeed.com/episodes/${slug}`,
-            },
-        };
-    } catch {
-        return {
-            title: 'Episode Not Found',
-            description: 'The Eureka Feed episode.',
-        };
-    }
-}
-
-export const dynamic = 'force-dynamic'; // always fetch fresh from backend
-
-// JSON-LD structured data for a podcast episode
-function EpisodeJsonLd({ title, dateStr, script, audioUrl, duration, slug }: {
+// Unified episode shape for rendering
+type EpisodeData = {
     title: string;
-    dateStr: string;
+    episode_date: string;
     script: string | null;
-    audioUrl: string | null;
-    duration: number | null;
-    slug: string;
-}) {
-    const jsonLd = {
-        '@context': 'https://schema.org',
-        '@type': 'PodcastEpisode',
-        name: title,
-        datePublished: dateStr,
-        description: `Daily science research briefing for ${formatDate(dateStr)}. The latest academic papers explained in simple terms.`,
-        url: `https://www.theeurekafeed.com/episodes/${slug}`,
-        partOfSeries: {
-            '@type': 'PodcastSeries',
-            name: 'The Eureka Feed',
-            url: 'https://www.theeurekafeed.com',
-        },
-        ...(audioUrl && {
-            associatedMedia: {
-                '@type': 'MediaObject',
-                contentUrl: audioUrl,
-                ...(duration && { duration: `PT${Math.floor(duration / 60)}M${duration % 60}S` }),
-            },
-        }),
-        ...(script && {
-            transcript: script.substring(0, 500) + '...',
-        }),
-    };
+    audio_url: string | null;
+    duration_seconds: number | null;
+    is_public: boolean; // true if full content available (either public or logged-in)
+};
 
-    return (
-        <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-    );
-}
+export default function EpisodePage() {
+    const params = useParams();
+    const slug = params.slug as string;
+    const [episode, setEpisode] = useState<EpisodeData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [notFound, setNotFound] = useState(false);
 
-export default async function EpisodePage({ params }: Props) {
-    const { slug } = params;
-    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(slug);
+    useEffect(() => {
+        let cancelled = false;
 
-    let episode;
-    try {
-        if (isDate) {
-            episode = await fetchPublicEpisodeByDate(slug);
-        } else {
-            episode = await fetchPublicEpisodeBySlug(slug);
+        async function loadEpisode() {
+            setLoading(true);
+            const isDate = /^\d{4}-\d{2}-\d{2}$/.test(slug);
+
+            // Step 1: Check if user is logged in
+            let isLoggedIn = false;
+            try {
+                const supabase = getSupabase();
+                const { data: { user } } = await supabase.auth.getUser();
+                isLoggedIn = !!user;
+            } catch {
+                // Not logged in
+            }
+
+            // Step 2: If logged in, fetch full episode via authenticated endpoint
+            if (isLoggedIn && !isDate) {
+                try {
+                    const fullEpisode: PodcastEpisode = await fetchEpisodeBySlug(slug);
+                    if (!cancelled) {
+                        setEpisode({
+                            title: fullEpisode.title,
+                            episode_date: fullEpisode.episode_date,
+                            script: fullEpisode.script,
+                            audio_url: fullEpisode.audio_url,
+                            duration_seconds: fullEpisode.duration_seconds,
+                            is_public: true, // Logged in = full access
+                        });
+                        setLoading(false);
+                        return;
+                    }
+                } catch {
+                    // Fall through to public endpoint
+                }
+            }
+
+            // Step 3: Fall back to public endpoint
+            try {
+                const publicEp: PublicEpisode = isDate
+                    ? await fetchPublicEpisodeByDate(slug)
+                    : await fetchPublicEpisodeBySlug(slug);
+
+                if (!cancelled) {
+                    setEpisode({
+                        title: publicEp.title,
+                        episode_date: publicEp.episode_date,
+                        script: publicEp.script,
+                        audio_url: publicEp.audio_url,
+                        duration_seconds: publicEp.duration_seconds,
+                        is_public: publicEp.is_public,
+                    });
+                }
+            } catch {
+                if (!cancelled) setNotFound(true);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
         }
-    } catch {
+
+        loadEpisode();
+        return () => { cancelled = true; };
+    }, [slug]);
+
+    // Loading state
+    if (loading) {
+        return (
+            <>
+                <Header />
+                <main className={styles.main}>
+                    <section className={styles.episodeSection}>
+                        <div className={styles.gatedSection}>
+                            <Loader2 size={32} className={styles.lockIcon} style={{ animation: 'spin 1s linear infinite' }} />
+                            <p>Loading episode...</p>
+                        </div>
+                    </section>
+                </main>
+                <Footer />
+                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            </>
+        );
+    }
+
+    // Not found
+    if (notFound || !episode) {
         return (
             <>
                 <Header />
@@ -129,10 +155,9 @@ export default async function EpisodePage({ params }: Props) {
         );
     }
 
-    // We get dateStr from the episode itself now
     const dateStr = episode.episode_date;
 
-    // Gated episode — show login CTA
+    // Gated episode — not logged in and episode is recent
     if (!episode.is_public) {
         return (
             <>
@@ -170,21 +195,13 @@ export default async function EpisodePage({ params }: Props) {
         );
     }
 
-    // Public episode — full content
+    // Full episode content (logged in OR old public episode)
     const paragraphs = episode.script
         ? episode.script.split('\n').filter((p) => p.trim().length > 0)
         : [];
 
     return (
         <>
-            <EpisodeJsonLd
-                title={episode.title}
-                dateStr={dateStr}
-                script={episode.script}
-                audioUrl={episode.audio_url}
-                duration={episode.duration_seconds}
-                slug={slug}
-            />
             <Header />
             <main className={styles.main}>
                 <section className={styles.episodeSection}>

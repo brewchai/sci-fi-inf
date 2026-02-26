@@ -172,11 +172,12 @@ async def backfill_slugs(
 
 
 class EpisodeDateResponse(BaseModel):
-    """Lightweight response with just episode ID, date, and title."""
+    """Lightweight response with just episode ID, date, title, and slug."""
     id: int
     episode_date: date
     title: str
     duration_seconds: Optional[int]
+    slug: Optional[str]
 
     class Config:
         from_attributes = True
@@ -195,7 +196,7 @@ async def list_episode_dates(
     # Only show episodes from Jan 20, 2026 onwards
     min_date = date(2026, 1, 20)
     result = await db.execute(
-        select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.title, PodcastEpisode.duration_seconds)
+        select(PodcastEpisode.id, PodcastEpisode.episode_date, PodcastEpisode.title, PodcastEpisode.duration_seconds, PodcastEpisode.slug)
         .where(PodcastEpisode.status == "ready")
         .where(PodcastEpisode.episode_date >= min_date)
         .order_by(desc(PodcastEpisode.episode_date))
@@ -207,7 +208,8 @@ async def list_episode_dates(
             id=row.id, 
             episode_date=row.episode_date, 
             title=row.title,
-            duration_seconds=row.duration_seconds
+            duration_seconds=row.duration_seconds,
+            slug=row.slug,
         )
         for row in rows
     ]
@@ -391,6 +393,29 @@ async def get_public_episode_by_slug(
         slug=episode.slug,
         is_public=is_public,
     )
+
+
+@router.get(
+    "/by-slug/{slug}",
+    response_model=PodcastEpisodeResponse,
+    summary="Get full episode by slug (authenticated, no 14-day gate)",
+)
+async def get_episode_by_slug(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+) -> PodcastEpisodeResponse:
+    """Get full episode content by slug. Used by the frontend for logged-in users."""
+    result = await db.execute(
+        select(PodcastEpisode)
+        .where(PodcastEpisode.slug == slug)
+        .where(PodcastEpisode.status == "ready")
+    )
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail=f"Episode not found: {slug}")
+
+    return PodcastEpisodeResponse.model_validate(episode)
 
 
 # =============================================================================

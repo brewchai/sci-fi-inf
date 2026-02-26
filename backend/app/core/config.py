@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     PAPERS_PER_EPISODE: int = 3  # Papers included in each episode
     MAX_PAPERS_FOR_RANKING: int = 20  # Max papers to send to LLM for ranking (cost control)
     
+    # Email (Resend) — for author outreach
+    RESEND_API_KEY: str | None = None
+    EMAIL_FROM: str = "The Eureka Feed <no-reply@theeurekafeed.com>"
+    EMAIL_REPLY_TO: str | None = None  # Set to your personal email
+    SITE_URL: str = "https://www.theeurekafeed.com"
+    
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 settings = Settings()
