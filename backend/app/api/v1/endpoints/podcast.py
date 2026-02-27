@@ -3,12 +3,15 @@ Podcast API endpoints.
 
 Provides endpoints for generating and retrieving podcast episodes.
 """
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from xml.etree.ElementTree import Element, SubElement, tostring, register_namespace
+from email.utils import format_datetime
 
 from app.db.session import get_db
 from app.models.podcast import PodcastEpisode
@@ -422,11 +425,6 @@ async def get_episode_by_slug(
 # RSS Feed for Apple Podcasts / Spotify
 # IMPORTANT: Must come BEFORE /{episode_id} to avoid route conflicts
 # =============================================================================
-
-from fastapi.responses import Response
-from xml.etree.ElementTree import Element, SubElement, tostring, register_namespace
-from email.utils import format_datetime
-from datetime import datetime, timezone
 
 
 PODCAST_TITLE = "The Eureka Feed"
