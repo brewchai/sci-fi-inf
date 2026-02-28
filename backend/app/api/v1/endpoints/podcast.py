@@ -189,10 +189,10 @@ async def generate_carousel_for_episode(
     
     return [
         CarouselSlideResponse(
-            paper_id=slide["paper_id"],
-            category=slide["category"],
-            headline=slide["headline"],
-            takeaways=slide["takeaways"]
+            paper_id=slide.get("paper_id", 0),
+            category=slide.get("category", "SCIENCE"),
+            headline=slide.get("headline", "Read about this amazing discovery"),
+            takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"])
         ) for slide in slides
     ]
 

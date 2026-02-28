@@ -105,6 +105,19 @@ Why it matters: {why_it_matters}
 Use these exact IDs and Categories in your JSON output:
 {id_mapping}
 
+Ensure your response is a valid JSON object with a single root key 'slides' containing an array of slide objects.
+Example output format:
+{{
+  "slides": [
+    {{
+      "paper_id": 123,
+      "category": "SPACE",
+      "headline": "A punchy hook here",
+      "takeaways": ["Hook...", "Mechanism...", "Impact..."]
+    }}
+  ]
+}}
+
 PAPER CONTENT:
 {papers_content}
 """
