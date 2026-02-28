@@ -1,0 +1,283 @@
+.main {
+    min-height: 100vh;
+    padding: var(--space-2xl) var(--space-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #000;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: var(--space-xl);
+    max-width: 800px;
+}
+
+.title {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-sm);
+    color: var(--accent);
+}
+
+.selectorContainer {
+    margin-bottom: var(--space-2xl);
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: center;
+}
+
+.select {
+    width: 100%;
+    padding: var(--space-md);
+    font-size: 1.1rem;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+}
+
+.select:focus {
+    border-color: var(--accent);
+}
+
+.controls {
+    margin-bottom: var(--space-xl);
+}
+
+.downloadButton {
+    background-color: var(--accent);
+    color: var(--bg-primary);
+    border: none;
+    padding: var(--space-md) var(--space-xl);
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0 auto;
+}
+
+.downloadButton:hover {
+    opacity: 0.9;
+}
+
+.downloadButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.carouselContainer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xl);
+    width: 1080px;
+    /* Force the container to be the exact width of our slides */
+    background: #000;
+    padding: 40px;
+    border-radius: 20px;
+}
+
+/* 1080x1080 Instagram Post Aspect Ratio */
+.slide {
+    width: 1080px;
+    height: 1080px;
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Background gradient for extra flair */
+.slideBackground {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 50% -20%, var(--bg-tertiary), var(--bg-primary) 70%);
+    z-index: 0;
+}
+
+.slideContent {
+    position: relative;
+    z-index: 1;
+    padding: 80px 100px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.slideHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 60px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 30px;
+}
+
+.brandName {
+    font-family: var(--font-serif);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+}
+
+.slideCount {
+    font-size: 1.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-weight: 500;
+}
+
+.paperCategory {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 1.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 24px;
+}
+
+.paperTitle {
+    font-family: var(--font-serif);
+    font-size: 4.2rem;
+    line-height: 1.15;
+    color: var(--text-primary);
+    margin-bottom: 60px;
+    font-weight: 700;
+}
+
+.takeawaysList {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+.takeawayItem {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+
+.takeawayNumber {
+    background-color: var(--accent-muted);
+    color: var(--accent);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.takeawayText {
+    font-size: 2.2rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.slideFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 40px;
+    border-top: 1px solid var(--border);
+}
+
+.footerWebsite {
+    font-size: 1.8rem;
+    color: var(--text-muted);
+}
+
+.footerSwipe {
+    font-size: 1.8rem;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Cover Slide specific styles */
+.coverSlide {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 100px;
+}
+
+.coverBrandName {
+    font-family: var(--font-serif);
+    font-size: 5rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 20px;
+}
+
+.coverEpisodeTitle {
+    font-family: var(--font-serif);
+    font-size: 6rem;
+    line-height: 1.1;
+    color: var(--text-primary);
+    margin-bottom: 40px;
+}
+
+.coverSubtitle {
+    font-size: 2.5rem;
+    color: var(--text-secondary);
+    max-width: 800px;
+}
+
+.loadingContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    gap: var(--space-md);
+    color: var(--text-secondary);
+    width: 100%;
+}
+
+.spinAnimation {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorContainer {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid var(--error);
+    color: var(--error);
+    padding: var(--space-xl);
+    border-radius: var(--radius-md);
+    text-align: center;
+    max-width: 600px;
+    margin: var(--space-2xl) auto;
+    width: 100%;
+}
