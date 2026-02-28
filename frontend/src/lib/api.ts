@@ -124,6 +124,16 @@ export async function fetchCarouselSlides(episodeId: number): Promise<CarouselSl
     return res.json();
 }
 
+export async function fetchPaperCarouselContent(paperId: number): Promise<CarouselSlide> {
+    const res = await fetch(`${API_URL}/podcast/paper/${paperId}/generate-carousel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
+    });
+    if (!res.ok) throw new Error('Failed to generate carousel slide for paper');
+    return res.json();
+}
+
 // Public episode types/functions (for SEO pages)
 export type PublicEpisode = {
     id: number;

@@ -157,3 +157,87 @@ PAPER CONTENT:
                     "takeaways": paper.key_takeaways[:3] if paper.key_takeaways else ["No takeaways generated"] * 3
                 })
             return fallback_slides
+
+    async def generate_paper_carousel_content(self, paper: Paper) -> Dict[str, Any]:
+        """
+        Takes a SINGLE paper and generates the carousel slides formatting.
+        Creates meatier content (up to 2 sentences per slide) with a clickbait headline.
+        """
+        paper_content = f"Title: {paper.title}\nTakeaways:\n"
+        paper_content += "\n".join(f"- {t}" for t in (paper.key_takeaways or []))
+        if paper.metrics and "why_it_matters" in paper.metrics:
+            paper_content += f"\nWhy it matters: {paper.metrics['why_it_matters']}"
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "paper_id": {"type": "integer"},
+                "category": {"type": "string"},
+                "headline": {"type": "string"},
+                "takeaways": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 3,
+                    "maxItems": 5
+                }
+            },
+            "required": ["paper_id", "category", "headline", "takeaways"]
+        }
+
+        user_prompt = f"""Generate engaging Instagram slides for the following paper.
+        
+Paper ID = {paper.id}
+Category = {paper.category_slug or 'SCIENCE'}
+
+Your task:
+1. `headline`: Create a highly engaging, slightly clickbaity hook specifically about this paper. This goes on Slide 1.
+2. `takeaways`: Create exactly 3 distinct, robust paragraphs that break down the paper's methodology, findings, and implications. 
+   CRITICAL CONSTRAINT: Each takeaway MUST be an absolute maximum of 2 sentences long. 
+   Do not use emojis. Explain the concept clearly but in a compelling way.
+
+Ensure your response is a valid JSON object matching this schema:
+{{
+  "paper_id": 123,
+  "category": "SPACE",
+  "headline": "A highly engaging hook here",
+  "takeaways": ["First point... (max 2 sentences).", "Second point... (max 2 sentences).", "Third point... (max 2 sentences)."]
+}}
+
+PAPER CONTENT:
+{paper_content}
+"""
+
+        logger.info(f"Generating on-the-fly carousel content for paper {paper.id}")
+        
+        try:
+            response = await self.llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7,
+                max_tokens=2000,
+            )
+            
+            result_str = response.choices[0].message.content
+            slide = json.loads(result_str)
+            
+            logger.info(f"Successfully generated carousel for paper {paper.id}")
+            return slide
+            
+        except Exception as e:
+            logger.error(f"Failed to generate carousel content for paper: {e}")
+            
+            # Fallback
+            return {
+                "paper_id": paper.id,
+                "category": paper.category_slug or "SCIENCE",
+                "headline": paper.headline or paper.title,
+                "takeaways": [
+                    "Failed to generate text. Listen to the episode.",
+                    "Failed to generate text.",
+                    "Failed to generate text."
+                ]
+            }

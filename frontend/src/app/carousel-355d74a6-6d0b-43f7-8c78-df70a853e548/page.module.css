@@ -1,70 +1,166 @@
 .main {
-    min-height: 100vh;
-    padding: var(--space-2xl) var(--space-md);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: #000;
+    padding: 4rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    font-family: var(--font-primary), sans-serif;
 }
 
 .header {
     text-align: center;
-    margin-bottom: var(--space-xl);
-    max-width: 800px;
+    margin-bottom: 3rem;
 }
 
 .title {
     font-size: 2.5rem;
-    margin-bottom: var(--space-sm);
-    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.header p {
+    color: var(--text-secondary);
 }
 
 .selectorContainer {
-    margin-bottom: var(--space-2xl);
-    width: 100%;
-    max-width: 600px;
     display: flex;
     justify-content: center;
+    margin-bottom: 2rem;
 }
 
 .select {
-    width: 100%;
-    padding: var(--space-md);
+    padding: 0.75rem 1rem;
     font-size: 1.1rem;
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
+    border-radius: 8px;
+    background-color: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    min-width: 300px;
     outline: none;
+    font-family: inherit;
     cursor: pointer;
-    appearance: none;
 }
 
 .select:focus {
     border-color: var(--accent);
 }
 
+/* Paper Selection Grid */
+.paperSelectionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-bottom: 3rem;
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.paperButton {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    color: var(--text-primary);
+}
+
+.paperButton:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.paperButtonActive {
+    border-color: var(--accent);
+    background: rgba(100, 255, 218, 0.05);
+    /* very light tint of pure accent #64ffda */
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.paperIcon {
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-top: 0.2rem;
+}
+
+.paperButtonTitle {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+/* Loading & Errors */
+.spinAnimation {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loadingContainer,
+.errorContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem;
+    text-align: center;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.loadingContainer h2 {
+    margin-top: 1.5rem;
+    font-size: 1.5rem;
+    color: var(--text-primary);
+}
+
+.loadingContainer p {
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.errorContainer {
+    border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+.errorContainer h2 {
+    color: #ff6b6b;
+    margin-bottom: 1rem;
+}
+
 .controls {
-    margin-bottom: var(--space-xl);
+    margin-bottom: 2rem;
 }
 
 .downloadButton {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
     background-color: var(--accent);
     color: var(--bg-primary);
     border: none;
-    padding: var(--space-md) var(--space-xl);
-    font-size: 1.1rem;
+    border-radius: 8px;
     font-weight: 600;
-    border-radius: var(--radius-md);
+    font-size: 1.1rem;
     cursor: pointer;
     transition: opacity 0.2s;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0 auto;
 }
 
-.downloadButton:hover {
+.downloadButton:hover:not(:disabled) {
     opacity: 0.9;
 }
 
@@ -73,48 +169,69 @@
     cursor: not-allowed;
 }
 
+/* Carousel Container */
 .carouselContainer {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2xl);
-    width: 1080px;
-    /* Force the container to be the exact width of our slides */
-    background: #000;
-    padding: 40px;
-    border-radius: 20px;
+    gap: 2rem;
+    overflow-x: auto;
+    padding: 1rem 0 3rem 0;
+    /* Hide scrollbar for cleaner look */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) var(--bg-secondary);
 }
 
-/* 1080x1080 Instagram Post Aspect Ratio */
+.carouselContainer::-webkit-scrollbar {
+    height: 8px;
+}
+
+.carouselContainer::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.carouselContainer::-webkit-scrollbar-thumb {
+    background-color: var(--accent);
+    border-radius: 4px;
+}
+
+/* Individual Slide (Strict 1080x1080 emulation) */
 .slide {
     width: 1080px;
     height: 1080px;
-    background-color: var(--bg-primary);
-    border: 2px solid var(--border);
+    min-width: 1080px;
+    min-height: 1080px;
+    background-color: #0a0a0f;
+    /* Explicit dark background */
     position: relative;
-    display: flex;
-    flex-direction: column;
+    box-sizing: border-box;
+    /* Scale down for internal preview so it fits on screen nicely */
+    transform-origin: top left;
+    transform: scale(0.4);
+    margin-right: -648px;
+    /* 1080 - (1080 * 0.4) = 648px offset to stack horizontally */
+    margin-bottom: -648px;
+    /* Offset vertical bounding box */
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     overflow: hidden;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* Background gradient for extra flair */
+/* Beautiful radial gradient background override per slide */
 .slideBackground {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 50% -20%, var(--bg-tertiary), var(--bg-primary) 70%);
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(100, 255, 218, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at bottom left, rgba(100, 255, 218, 0.03) 0%, transparent 50%);
     z-index: 0;
 }
 
 .slideContent {
     position: relative;
     z-index: 1;
-    padding: 80px 100px;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    padding: 80px 100px;
+    box-sizing: border-box;
 }
 
 .slideHeader {
@@ -122,162 +239,82 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 60px;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 30px;
 }
 
 .brandName {
-    font-family: var(--font-serif);
-    font-size: 2.5rem;
     font-weight: 700;
+    font-size: 1.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     color: var(--accent);
-    letter-spacing: -0.02em;
 }
 
 .slideCount {
-    font-size: 1.8rem;
-    color: var(--text-muted);
-    font-family: var(--font-sans);
-    font-weight: 500;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 16px;
+    border-radius: 20px;
 }
 
 .paperCategory {
-    display: inline-block;
     color: var(--accent);
-    font-size: 1.6rem;
-    font-weight: 600;
+    font-size: 1.8rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.15em;
     margin-bottom: 24px;
 }
 
-.paperTitle {
-    font-family: var(--font-serif);
-    font-size: 4.2rem;
-    line-height: 1.15;
-    color: var(--text-primary);
-    margin-bottom: 60px;
-    font-weight: 700;
+/* Hook/Headline Text */
+.hookHeadline {
+    font-size: 6rem;
+    font-weight: 800;
+    font-family: var(--font-heading), sans-serif;
+    line-height: 1.1;
+    color: #ffffff;
+    margin-bottom: 40px;
+    /* Subtle text shadow for depth */
+    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
-.takeawaysList {
-    list-style: none;
+/* Standalone Takeaway Content */
+.standaloneTakeawayWrapper {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 40px;
-    margin-top: auto;
-    margin-bottom: auto;
-}
-
-.takeawayItem {
-    display: flex;
-    gap: 30px;
-    align-items: flex-start;
-}
-
-.takeawayNumber {
-    background-color: var(--accent-muted);
-    color: var(--accent);
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: 1px solid var(--accent);
-    display: flex;
-    align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
-    font-weight: 700;
-    flex-shrink: 0;
+    padding: 0 40px;
+    /* Indent slightly for readability */
 }
 
-.takeawayText {
-    font-size: 2.2rem;
+.standaloneTakeawayText {
+    font-size: 3.5rem;
     line-height: 1.4;
-    color: var(--text-secondary);
+    color: #ffffff;
+    font-weight: 500;
 }
 
 .slideFooter {
+    margin-top: auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: auto;
     padding-top: 40px;
-    border-top: 1px solid var(--border);
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .footerWebsite {
     font-size: 1.8rem;
-    color: var(--text-muted);
+    color: var(--text-secondary);
 }
 
 .footerSwipe {
     font-size: 1.8rem;
-    color: var(--accent);
     font-weight: 600;
+    color: var(--accent);
     display: flex;
     align-items: center;
     gap: 12px;
-}
-
-/* Cover Slide specific styles */
-.coverSlide {
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    padding: 100px;
-}
-
-.coverBrandName {
-    font-family: var(--font-serif);
-    font-size: 5rem;
-    font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 20px;
-}
-
-.coverEpisodeTitle {
-    font-family: var(--font-serif);
-    font-size: 6rem;
-    line-height: 1.1;
-    color: var(--text-primary);
-    margin-bottom: 40px;
-}
-
-.coverSubtitle {
-    font-size: 2.5rem;
-    color: var(--text-secondary);
-    max-width: 800px;
-}
-
-.loadingContainer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 50vh;
-    gap: var(--space-md);
-    color: var(--text-secondary);
-    width: 100%;
-}
-
-.spinAnimation {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.errorContainer {
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid var(--error);
-    color: var(--error);
-    padding: var(--space-xl);
-    border-radius: var(--radius-md);
-    text-align: center;
-    max-width: 600px;
-    margin: var(--space-2xl) auto;
-    width: 100%;
 }

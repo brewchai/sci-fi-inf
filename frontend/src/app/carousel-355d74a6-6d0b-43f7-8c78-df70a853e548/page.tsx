@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, Loader2, ArrowRight, RefreshCw } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchCarouselSlides, EpisodeDate, PodcastEpisode, CarouselSlide } from '@/lib/api';
+import { Download, Loader2, ArrowRight, RefreshCw, FileText } from 'lucide-react';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, EpisodeDate, PodcastEpisode, Paper, CarouselSlide } from '@/lib/api';
 import styles from './page.module.css';
 
 export default function CarouselGenerator() {
@@ -13,14 +13,19 @@ export default function CarouselGenerator() {
     const [selectedSlug, setSelectedSlug] = useState<string>('');
 
     const [episode, setEpisode] = useState<PodcastEpisode | null>(null);
-    const [slides, setSlides] = useState<CarouselSlide[]>([]);
+    const [papers, setPapers] = useState<Paper[]>([]);
+
+    const [selectedPaperId, setSelectedPaperId] = useState<number | null>(null);
+    const [slideData, setSlideData] = useState<CarouselSlide | null>(null);
 
     const [loadingList, setLoadingList] = useState(true);
-    const [loadingData, setLoadingData] = useState(false);
-    const [regenerating, setRegenerating] = useState(false);
+    const [loadingPapers, setLoadingPapers] = useState(false);
+    const [loadingSlide, setLoadingSlide] = useState(false);
+
     const [error, setError] = useState<string | null>(null);
     const [downloading, setDownloading] = useState(false);
 
+    // Initial load of episodes
     useEffect(() => {
         async function init() {
             try {
@@ -36,56 +41,77 @@ export default function CarouselGenerator() {
         init();
     }, []);
 
-    async function loadData(forceRegenerate: boolean = false) {
-        if (!selectedSlug) {
-            setEpisode(null);
-            setSlides([]);
-            return;
+    // When episode changes, fetch papers
+    useEffect(() => {
+        async function loadEpisodePapers() {
+            if (!selectedSlug) {
+                setEpisode(null);
+                setPapers([]);
+                setSelectedPaperId(null);
+                setSlideData(null);
+                return;
+            }
+
+            try {
+                setLoadingPapers(true);
+                setError(null);
+                setSelectedPaperId(null);
+                setSlideData(null);
+
+                const ep = await fetchEpisodeBySlug(selectedSlug);
+                setEpisode(ep);
+
+                if (ep.paper_ids && ep.paper_ids.length > 0) {
+                    const fetchedPapers = await fetchPapers(ep.paper_ids);
+                    setPapers(fetchedPapers);
+                } else {
+                    setPapers([]);
+                }
+            } catch (err) {
+                console.error(err);
+                setError('Failed to load papers for the selected episode.');
+            } finally {
+                setLoadingPapers(false);
+            }
         }
 
+        loadEpisodePapers();
+    }, [selectedSlug]);
+
+    // When a paper is selected (or regenerate is clicked), fetch the AI slide copy
+    async function loadPaperSlide(paperId: number) {
         try {
-            if (forceRegenerate) {
-                setRegenerating(true);
-            } else {
-                setLoadingData(true);
-            }
+            setLoadingSlide(true);
             setError(null);
 
-            // Fetch full episode details
-            const ep = await fetchEpisodeBySlug(selectedSlug);
-            setEpisode(ep);
-
-            // Fetch dynamic on-the-fly slides via LLM
-            if (ep.id) {
-                const fetchedSlides = await fetchCarouselSlides(ep.id);
-                setSlides(fetchedSlides);
-            } else {
-                setSlides([]);
-            }
+            const slide = await fetchPaperCarouselContent(paperId);
+            setSlideData(slide);
+            setTimeout(() => { slideRefs.current = []; }, 0); // clear refs on new data
         } catch (err) {
             console.error(err);
-            setError('Failed to load or generate data for the selected episode.');
+            setError('Failed to generate slide content for this paper.');
         } finally {
-            setLoadingData(false);
-            setRegenerating(false);
+            setLoadingSlide(false);
         }
     }
 
-    // Load when slug changes
-    useEffect(() => {
-        loadData(false);
-    }, [selectedSlug]);
+    const handleSelectPaper = (id: number) => {
+        setSelectedPaperId(id);
+        loadPaperSlide(id);
+    };
 
     const handleRegenerate = () => {
-        loadData(true);
+        if (selectedPaperId) {
+            loadPaperSlide(selectedPaperId);
+        }
     };
 
     const handleDownloadAll = async () => {
-        if (!slideRefs.current.length || !episode) return;
+        if (!slideRefs.current.length || !slideData) return;
         setDownloading(true);
 
         try {
-            const slugDate = episode.episode_date;
+            const slugDate = episode?.episode_date || 'carousel';
             for (let i = 0; i < slideRefs.current.length; i++) {
                 const slideElement = slideRefs.current[i];
                 if (!slideElement) continue;
@@ -98,11 +124,10 @@ export default function CarouselGenerator() {
 
                 const dataUrl = canvas.toDataURL('image/png');
                 const link = document.createElement('a');
-                link.download = `carousel-${slugDate}-slide-${i + 1}.png`;
+                link.download = `paper-${slideData.paper_id}-slide-${i + 1}.png`;
                 link.href = dataUrl;
                 link.click();
 
-                // slight delay to prevent browser from blocking multiple rapid downloads
                 await new Promise((resolve) => setTimeout(resolve, 500));
             }
         } catch (err) {
@@ -126,7 +151,7 @@ export default function CarouselGenerator() {
         <main className={styles.main}>
             <div className={styles.header}>
                 <h1 className={styles.title}>Instagram Carousel Generator</h1>
-                <p>Select an episode below to generate AI-tailored Instagram templates.</p>
+                <p>Generate meatier, multi-slide carousels for individual papers.</p>
             </div>
 
             <div className={styles.selectorContainer}>
@@ -148,40 +173,61 @@ export default function CarouselGenerator() {
                 )}
             </div>
 
-            {loadingData && (
+            {loadingPapers && (
                 <div className={styles.loadingContainer}>
-                    <Loader2 size={48} className={styles.spinAnimation} />
-                    <h2>Generating punchy slides with AI...</h2>
-                    <p>This usually takes 5-10 seconds.</p>
+                    <Loader2 size={32} className={styles.spinAnimation} />
+                    <h2>Loading papers...</h2>
                 </div>
             )}
 
-            {error && !loadingData && (
+            {/* Paper Selection Grid */}
+            {episode && papers.length > 0 && !loadingPapers && (
+                <div className={styles.paperSelectionGrid}>
+                    <h3 style={{ gridColumn: '1 / -1', marginBottom: '1rem', color: 'var(--text-secondary)' }}>Select a paper to generate its carousel:</h3>
+                    {papers.map((paper) => (
+                        <button
+                            key={paper.id}
+                            className={`${styles.paperButton} ${selectedPaperId === paper.id ? styles.paperButtonActive : ''}`}
+                            onClick={() => handleSelectPaper(paper.id)}
+                        >
+                            <FileText size={20} className={styles.paperIcon} />
+                            <div className={styles.paperButtonTitle}>{paper.title}</div>
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {loadingSlide && (
+                <div className={styles.loadingContainer}>
+                    <Loader2 size={48} className={styles.spinAnimation} />
+                    <h2>Cooking up the hook and takeaways...</h2>
+                    <p>Writing meatier content with AI...</p>
+                </div>
+            )}
+
+            {error && !loadingSlide && !loadingPapers && (
                 <div className={styles.errorContainer}>
                     <h2>Error</h2>
                     <p>{error}</p>
                 </div>
             )}
 
-            {episode && !loadingData && slides.length > 0 && (
+            {/* Slide Rendering */}
+            {selectedPaperId && slideData && !loadingSlide && (
                 <>
-                    <div className={styles.controls} style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                    <div className={styles.controls} style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '3rem' }}>
                         <button
                             className={styles.downloadButton}
                             onClick={handleRegenerate}
-                            disabled={regenerating || downloading}
+                            disabled={downloading}
                             style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}
                         >
-                            {regenerating ? (
-                                <><Loader2 size={20} className={styles.spinAnimation} /> Thinking...</>
-                            ) : (
-                                <><RefreshCw size={20} /> Regenerate Text</>
-                            )}
+                            <RefreshCw size={20} /> Regenerate Text
                         </button>
                         <button
                             className={styles.downloadButton}
                             onClick={handleDownloadAll}
-                            disabled={downloading || regenerating}
+                            disabled={downloading}
                         >
                             {downloading ? (
                                 <><Loader2 size={20} className={styles.spinAnimation} /> Generating PNGs...</>
@@ -191,28 +237,38 @@ export default function CarouselGenerator() {
                         </button>
                     </div>
 
-                    <div className={styles.carouselContainer} style={{ opacity: regenerating ? 0.5 : 1, transition: 'opacity 0.2s' }}>
-                        {/* Cover Slide */}
+                    <div className={styles.carouselContainer} style={{ opacity: downloading ? 0.7 : 1, transition: 'opacity 0.2s' }}>
+
+                        {/* Slide 1: The Hook / Headline Slide */}
                         <div
-                            className={`${styles.slide} ${styles.coverSlide}`}
+                            className={`${styles.slide} ${styles.hookSlide}`}
                             ref={(el) => { slideRefs.current[0] = el; }}
                         >
                             <div className={styles.slideBackground}></div>
-                            <div className={styles.slideContent}>
-                                <div className={styles.coverBrandName}>The Eureka Feed</div>
-                                <div className={styles.coverEpisodeTitle}>{episode.title || 'Daily Scientific Discoveries'}</div>
-                                <div className={styles.coverSubtitle}>{formatDate(episode.episode_date)}</div>
+                            <div className={styles.slideContent} style={{ justifyContent: 'center' }}>
+                                <div className={styles.slideHeader}>
+                                    <div className={styles.brandName}>The Eureka Feed</div>
+                                    <div className={styles.slideCount}>1 / {slideData.takeaways.length + 1}</div>
+                                </div>
 
-                                <div className={styles.slideFooter} style={{ justifyContent: 'center', marginTop: 'auto', border: 'none' }}>
-                                    <div className={styles.footerSwipe}>Swipe to learn <ArrowRight size={24} /></div>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    {slideData.category && <div className={styles.paperCategory}>{slideData.category}</div>}
+                                    <div className={styles.hookHeadline}>
+                                        {slideData.headline}
+                                    </div>
+                                </div>
+
+                                <div className={styles.slideFooter}>
+                                    <div className={styles.footerWebsite}>theeurekafeed.com</div>
+                                    <div className={styles.footerSwipe}>Swipe <ArrowRight size={24} /></div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* AI Generated Paper Slides */}
-                        {slides.map((slide, idx) => (
+                        {/* Slides 2+: The Individual Takeaways */}
+                        {slideData.takeaways.map((takeaway, idx) => (
                             <div
-                                key={`${slide.paper_id}-${idx}`}
+                                key={`takeaway-${idx}`}
                                 className={styles.slide}
                                 ref={(el) => { slideRefs.current[idx + 1] = el; }}
                             >
@@ -220,30 +276,19 @@ export default function CarouselGenerator() {
                                 <div className={styles.slideContent}>
                                     <div className={styles.slideHeader}>
                                         <div className={styles.brandName}>The Eureka Feed</div>
-                                        <div className={styles.slideCount}>{idx + 1} / {slides.length}</div>
+                                        <div className={styles.slideCount}>{idx + 2} / {slideData.takeaways.length + 1}</div>
                                     </div>
 
-                                    {slide.category && <div className={styles.paperCategory}>{slide.category}</div>}
-
-                                    <div className={styles.paperTitle} style={{ fontSize: slide.headline.length > 50 ? '3.2rem' : '4.2rem' }}>
-                                        {slide.headline}
+                                    <div className={styles.standaloneTakeawayWrapper}>
+                                        <div className={styles.standaloneTakeawayText}>
+                                            {takeaway}
+                                        </div>
                                     </div>
-
-                                    <ul className={styles.takeawaysList}>
-                                        {slide.takeaways.map((takeaway, tkIdx) => (
-                                            <li key={tkIdx} className={styles.takeawayItem}>
-                                                <div className={styles.takeawayNumber}>{tkIdx + 1}</div>
-                                                <div className={styles.takeawayText} style={{ fontSize: takeaway.length > 100 ? '2rem' : '2.2rem' }}>
-                                                    {takeaway}
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
 
                                     <div className={styles.slideFooter}>
                                         <div className={styles.footerWebsite}>theeurekafeed.com</div>
                                         <div className={styles.footerSwipe}>
-                                            {idx === slides.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
+                                            {idx === slideData.takeaways.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
                                         </div>
                                     </div>
                                 </div>

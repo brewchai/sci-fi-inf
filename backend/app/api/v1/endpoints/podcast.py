@@ -198,6 +198,40 @@ async def generate_carousel_for_episode(
 
 
 @router.post(
+    "/paper/{paper_id}/generate-carousel",
+    response_model=CarouselSlideResponse,
+    summary="Generate engaging carousel slides on-the-fly for a SINGLE paper",
+)
+async def generate_carousel_for_paper(
+    paper_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> CarouselSlideResponse:
+    """Generates robust, multi-sentence slides for a single paper."""
+    from app.services.carousel import CarouselGenerator
+    from app.models.paper import Paper
+    
+    # 1. Fetch Paper
+    result = await db.execute(
+        select(Paper).where(Paper.id == paper_id)
+    )
+    paper = result.scalar_one_or_none()
+    
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+        
+    # 2. Generate Carousel Format
+    carousel_generator = CarouselGenerator(db)
+    slide = await carousel_generator.generate_paper_carousel_content(paper)
+    
+    return CarouselSlideResponse(
+        paper_id=slide.get("paper_id", paper_id),
+        category=slide.get("category", paper.category_slug or "SCIENCE"),
+        headline=slide.get("headline", paper.headline or paper.title),
+        takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"])
+    )
+
+
+@router.post(
     "/backfill-slugs",
     summary="Backfill slugs for existing episodes",
 )
