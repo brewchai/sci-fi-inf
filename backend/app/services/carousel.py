@@ -98,7 +98,7 @@ Why it matters: {why_it_matters}
         }
 
         # Add instructions specifically linking our required paper_ids back
-        id_mapping = "\n".join([f"Paper {i} ID = {p.id}, Category = {p.category or 'SCIENCE'}" for i, p in enumerate(papers, 1)])
+        id_mapping = "\n".join([f"Paper {i} ID = {p.id}, Category = {p.category_slug or 'SCIENCE'}" for i, p in enumerate(papers, 1)])
         
         user_prompt = f"""Generate engaging Instagram slides for the following papers.
         
@@ -139,7 +139,7 @@ PAPER CONTENT:
             for paper in papers:
                 fallback_slides.append({
                     "paper_id": paper.id,
-                    "category": paper.category or "SCIENCE",
+                    "category": paper.category_slug or "SCIENCE",
                     "headline": paper.headline or paper.title,
                     "takeaways": paper.key_takeaways[:3] if paper.key_takeaways else ["No takeaways generated"] * 3
                 })
