@@ -13,7 +13,7 @@ import { AudioPlayer } from '@/components/AudioPlayer';
 import { TranscriptSection } from '@/components/TranscriptSection';
 import { HomeFAQItem } from '@/components/HomeFAQItem';
 import { faqs } from '@/lib/faqData';
-import { fetchLatestPodcast, fetchPapers } from '@/lib/api';
+import { fetchLatestPodcast, fetchPapers, fetchPodcastStats } from '@/lib/api';
 import styles from './page.module.css';
 
 // LandingWrapper is a thin client boundary that mounts the full-page Vanta canvas
@@ -108,9 +108,14 @@ export default async function LandingPage() {
     // Fetch latest episode from API
     let latestEpisode: Awaited<ReturnType<typeof fetchLatestPodcast>> | null = null;
     let episodePapers: { title: string; url: string }[] = [];
+    let papersScanned = '25K+';
 
     try {
-        latestEpisode = await fetchLatestPodcast();
+        const [episode, stats] = await Promise.all([
+            fetchLatestPodcast(),
+            fetchPodcastStats(),
+        ]);
+        latestEpisode = episode;
         if (latestEpisode?.paper_ids?.length) {
             const papers = await fetchPapers(latestEpisode.paper_ids);
             episodePapers = papers.map(p => ({
@@ -118,8 +123,10 @@ export default async function LandingPage() {
                 url: p.doi ? `https://doi.org/${p.doi}` : (p.pdf_url || '#'),
             }));
         }
+        const n = stats.papers_scanned;
+        papersScanned = n >= 1000 ? `${Math.floor(n / 1000)}K+` : `${n}+`;
     } catch {
-        // API might be down — page still renders without episode
+        // API might be down — page still renders without episode or stats
     }
     return (
         <>
@@ -157,8 +164,8 @@ export default async function LandingPage() {
                     <section className={styles.stats}>
                         <div className={styles.statsGrid}>
                             <div className={styles.stat}>
-                                <div className={styles.statNumber}>4K+</div>
-                                <div className={styles.statLabel}>Papers scanned weekly</div>
+                                <div className={styles.statNumber}>{papersScanned}</div>
+                                <div className={styles.statLabel}>Papers scanned total</div>
                             </div>
                             <div className={styles.stat}>
                                 <div className={styles.statNumber}>12</div>

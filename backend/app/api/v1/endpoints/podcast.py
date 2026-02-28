@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from xml.etree.ElementTree import Element, SubElement, tostring, register_namespace
 from email.utils import format_datetime
 
@@ -419,6 +419,23 @@ async def get_episode_by_slug(
         raise HTTPException(status_code=404, detail=f"Episode not found: {slug}")
 
     return PodcastEpisodeResponse.model_validate(episode)
+
+
+# =============================================================================
+# Stats
+# =============================================================================
+
+@router.get("/stats", summary="Get podcast stats (episode count, papers scanned)")
+async def get_podcast_stats(db: AsyncSession = Depends(get_db)) -> dict:
+    """Returns episode count and estimated total papers scanned."""
+    episode_count = await db.scalar(
+        select(func.count()).select_from(PodcastEpisode)
+        .where(PodcastEpisode.status == "ready")
+    )
+    return {
+        "episodes": episode_count or 0,
+        "papers_scanned": (episode_count or 0) * 500,  # 10 categories × 50 papers/day
+    }
 
 
 # =============================================================================

@@ -136,6 +136,22 @@ export async function fetchPublicEpisodeBySlug(slug: string): Promise<PublicEpis
     if (!res.ok) throw new Error('Failed to fetch episode');
     return res.json();
 }
+// Stats
+export type PodcastStats = {
+    episodes: number;
+    papers_scanned: number;
+};
+
+export async function fetchPodcastStats(): Promise<PodcastStats> {
+    try {
+        const res = await fetch(`${API_URL}/podcast/stats`, { cache: 'no-store' });
+        if (!res.ok) return { episodes: 0, papers_scanned: 25000 };
+        return res.json();
+    } catch {
+        return { episodes: 0, papers_scanned: 25000 };
+    }
+}
+
 // Social Harvesting
 export interface SocialPost {
     id: number;
