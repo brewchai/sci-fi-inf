@@ -147,6 +147,56 @@ async def backfill_titles(
     return {"message": f"Updated {len(updated)} episode titles", "updated": len(updated), "details": updated}
 
 
+class CarouselSlideResponse(BaseModel):
+    """Slide response for on-the-fly carousel generation."""
+    paper_id: int
+    category: str
+    headline: str
+    takeaways: List[str]
+
+
+@router.post(
+    "/{episode_id}/generate-carousel",
+    response_model=List[CarouselSlideResponse],
+    summary="Generate engaging carousel slides on-the-fly using LLM",
+)
+async def generate_carousel_for_episode(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> List[CarouselSlideResponse]:
+    """Generates punchy Instagram-style slides from the episode's papers without saving to the DB."""
+    from app.services.carousel import CarouselGenerator
+    
+    # 1. Fetch Episode
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+    
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+        
+    if not episode.paper_ids:
+        return []
+        
+    # 2. Fetch Papers
+    generator = PodcastGenerator(db)
+    papers = await generator.fetch_papers(episode.paper_ids)
+    
+    # 3. Generate Carousel Formats
+    carousel_generator = CarouselGenerator(db)
+    slides = await carousel_generator.generate_carousel_content(papers)
+    
+    return [
+        CarouselSlideResponse(
+            paper_id=slide["paper_id"],
+            category=slide["category"],
+            headline=slide["headline"],
+            takeaways=slide["takeaways"]
+        ) for slide in slides
+    ]
+
+
 @router.post(
     "/backfill-slugs",
     summary="Backfill slugs for existing episodes",

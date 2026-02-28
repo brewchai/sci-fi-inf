@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, Loader2, ArrowRight } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, EpisodeDate, PodcastEpisode, Paper } from '@/lib/api';
+import { Download, Loader2, ArrowRight, RefreshCw } from 'lucide-react';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchCarouselSlides, EpisodeDate, PodcastEpisode, CarouselSlide } from '@/lib/api';
 import styles from './page.module.css';
 
 export default function CarouselGenerator() {
@@ -13,10 +13,11 @@ export default function CarouselGenerator() {
     const [selectedSlug, setSelectedSlug] = useState<string>('');
 
     const [episode, setEpisode] = useState<PodcastEpisode | null>(null);
-    const [papers, setPapers] = useState<Paper[]>([]);
+    const [slides, setSlides] = useState<CarouselSlide[]>([]);
 
     const [loadingList, setLoadingList] = useState(true);
     const [loadingData, setLoadingData] = useState(false);
+    const [regenerating, setRegenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [downloading, setDownloading] = useState(false);
 
@@ -35,38 +36,49 @@ export default function CarouselGenerator() {
         init();
     }, []);
 
-    useEffect(() => {
+    async function loadData(forceRegenerate: boolean = false) {
         if (!selectedSlug) {
             setEpisode(null);
-            setPapers([]);
+            setSlides([]);
             return;
         }
 
-        async function loadData() {
-            try {
+        try {
+            if (forceRegenerate) {
+                setRegenerating(true);
+            } else {
                 setLoadingData(true);
-                setError(null);
-
-                // Fetch full episode details
-                const ep = await fetchEpisodeBySlug(selectedSlug);
-                setEpisode(ep);
-
-                // Fetch associated papers
-                if (ep.paper_ids && ep.paper_ids.length > 0) {
-                    const fetchedPapers = await fetchPapers(ep.paper_ids);
-                    setPapers(fetchedPapers);
-                } else {
-                    setPapers([]);
-                }
-            } catch (err) {
-                console.error(err);
-                setError('Failed to load data for the selected episode.');
-            } finally {
-                setLoadingData(false);
             }
+            setError(null);
+
+            // Fetch full episode details
+            const ep = await fetchEpisodeBySlug(selectedSlug);
+            setEpisode(ep);
+
+            // Fetch dynamic on-the-fly slides via LLM
+            if (ep.id) {
+                const fetchedSlides = await fetchCarouselSlides(ep.id);
+                setSlides(fetchedSlides);
+            } else {
+                setSlides([]);
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Failed to load or generate data for the selected episode.');
+        } finally {
+            setLoadingData(false);
+            setRegenerating(false);
         }
-        loadData();
+    }
+
+    // Load when slug changes
+    useEffect(() => {
+        loadData(false);
     }, [selectedSlug]);
+
+    const handleRegenerate = () => {
+        loadData(true);
+    };
 
     const handleDownloadAll = async () => {
         if (!slideRefs.current.length || !episode) return;
@@ -114,7 +126,7 @@ export default function CarouselGenerator() {
         <main className={styles.main}>
             <div className={styles.header}>
                 <h1 className={styles.title}>Instagram Carousel Generator</h1>
-                <p>Select an episode below to generate the template.</p>
+                <p>Select an episode below to generate AI-tailored Instagram templates.</p>
             </div>
 
             <div className={styles.selectorContainer}>
@@ -139,7 +151,8 @@ export default function CarouselGenerator() {
             {loadingData && (
                 <div className={styles.loadingContainer}>
                     <Loader2 size={48} className={styles.spinAnimation} />
-                    <h2>Loading episode data...</h2>
+                    <h2>Generating punchy slides with AI...</h2>
+                    <p>This usually takes 5-10 seconds.</p>
                 </div>
             )}
 
@@ -150,13 +163,25 @@ export default function CarouselGenerator() {
                 </div>
             )}
 
-            {episode && !loadingData && (
+            {episode && !loadingData && slides.length > 0 && (
                 <>
-                    <div className={styles.controls}>
+                    <div className={styles.controls} style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                        <button
+                            className={styles.downloadButton}
+                            onClick={handleRegenerate}
+                            disabled={regenerating || downloading}
+                            style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}
+                        >
+                            {regenerating ? (
+                                <><Loader2 size={20} className={styles.spinAnimation} /> Thinking...</>
+                            ) : (
+                                <><RefreshCw size={20} /> Regenerate Text</>
+                            )}
+                        </button>
                         <button
                             className={styles.downloadButton}
                             onClick={handleDownloadAll}
-                            disabled={downloading}
+                            disabled={downloading || regenerating}
                         >
                             {downloading ? (
                                 <><Loader2 size={20} className={styles.spinAnimation} /> Generating PNGs...</>
@@ -166,7 +191,7 @@ export default function CarouselGenerator() {
                         </button>
                     </div>
 
-                    <div className={styles.carouselContainer}>
+                    <div className={styles.carouselContainer} style={{ opacity: regenerating ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                         {/* Cover Slide */}
                         <div
                             className={`${styles.slide} ${styles.coverSlide}`}
@@ -184,10 +209,10 @@ export default function CarouselGenerator() {
                             </div>
                         </div>
 
-                        {/* Paper Slides */}
-                        {papers.map((paper, idx) => (
+                        {/* AI Generated Paper Slides */}
+                        {slides.map((slide, idx) => (
                             <div
-                                key={paper.id}
+                                key={`${slide.paper_id}-${idx}`}
                                 className={styles.slide}
                                 ref={(el) => { slideRefs.current[idx + 1] = el; }}
                             >
@@ -195,20 +220,22 @@ export default function CarouselGenerator() {
                                 <div className={styles.slideContent}>
                                     <div className={styles.slideHeader}>
                                         <div className={styles.brandName}>The Eureka Feed</div>
-                                        <div className={styles.slideCount}>{idx + 1} / {papers.length}</div>
+                                        <div className={styles.slideCount}>{idx + 1} / {slides.length}</div>
                                     </div>
 
-                                    {paper.category && <div className={styles.paperCategory}>{paper.category}</div>}
+                                    {slide.category && <div className={styles.paperCategory}>{slide.category}</div>}
 
-                                    <div className={styles.paperTitle}>
-                                        {paper.headline || paper.title}
+                                    <div className={styles.paperTitle} style={{ fontSize: slide.headline.length > 50 ? '3.2rem' : '4.2rem' }}>
+                                        {slide.headline}
                                     </div>
 
                                     <ul className={styles.takeawaysList}>
-                                        {paper.key_takeaways.slice(0, 3).map((takeaway, tkIdx) => (
+                                        {slide.takeaways.map((takeaway, tkIdx) => (
                                             <li key={tkIdx} className={styles.takeawayItem}>
                                                 <div className={styles.takeawayNumber}>{tkIdx + 1}</div>
-                                                <div className={styles.takeawayText}>{takeaway}</div>
+                                                <div className={styles.takeawayText} style={{ fontSize: takeaway.length > 100 ? '2rem' : '2.2rem' }}>
+                                                    {takeaway}
+                                                </div>
                                             </li>
                                         ))}
                                     </ul>
@@ -216,7 +243,7 @@ export default function CarouselGenerator() {
                                     <div className={styles.slideFooter}>
                                         <div className={styles.footerWebsite}>theeurekafeed.com</div>
                                         <div className={styles.footerSwipe}>
-                                            {idx === papers.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
+                                            {idx === slides.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
                                         </div>
                                     </div>
                                 </div>

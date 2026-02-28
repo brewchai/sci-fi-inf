@@ -41,6 +41,13 @@ export type EpisodeDate = {
     slug: string | null;
 };
 
+export type CarouselSlide = {
+    paper_id: number;
+    category: string;
+    headline: string;
+    takeaways: string[];
+};
+
 export async function fetchCategories(): Promise<Category[]> {
     const res = await fetch(`${API_URL}/papers/categories`);
     if (!res.ok) throw new Error('Failed to fetch categories');
@@ -104,6 +111,16 @@ export async function fetchEpisodeById(id: number): Promise<PodcastEpisode> {
 export async function fetchEpisodeBySlug(slug: string): Promise<PodcastEpisode> {
     const res = await fetch(`${API_URL}/podcast/by-slug/${slug}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch episode');
+    return res.json();
+}
+
+export async function fetchCarouselSlides(episodeId: number): Promise<CarouselSlide[]> {
+    const res = await fetch(`${API_URL}/podcast/${episodeId}/generate-carousel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
+    });
+    if (!res.ok) throw new Error('Failed to generate carousel slides');
     return res.json();
 }
 
