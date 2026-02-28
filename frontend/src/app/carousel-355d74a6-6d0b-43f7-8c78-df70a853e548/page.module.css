@@ -194,6 +194,15 @@
     border-radius: 4px;
 }
 
+/* Individual Slide Wrapper */
+.slideWrapper {
+    width: 432px;
+    /* 1080 * 0.4 */
+    height: 432px;
+    flex: 0 0 432px;
+    position: relative;
+}
+
 /* Individual Slide (Strict 1080x1080 emulation) */
 .slide {
     width: 1080px;
@@ -202,15 +211,13 @@
     min-height: 1080px;
     background-color: #0a0a0f;
     /* Explicit dark background */
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
     box-sizing: border-box;
     /* Scale down for internal preview so it fits on screen nicely */
     transform-origin: top left;
     transform: scale(0.4);
-    margin-right: -648px;
-    /* 1080 - (1080 * 0.4) = 648px offset to stack horizontally */
-    margin-bottom: -648px;
-    /* Offset vertical bounding box */
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     overflow: hidden;
 }

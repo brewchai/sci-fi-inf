@@ -240,55 +240,58 @@ export default function CarouselGenerator() {
                     <div className={styles.carouselContainer} style={{ opacity: downloading ? 0.7 : 1, transition: 'opacity 0.2s' }}>
 
                         {/* Slide 1: The Hook / Headline Slide */}
-                        <div
-                            className={`${styles.slide} ${styles.hookSlide}`}
-                            ref={(el) => { slideRefs.current[0] = el; }}
-                        >
-                            <div className={styles.slideBackground}></div>
-                            <div className={styles.slideContent} style={{ justifyContent: 'center' }}>
-                                <div className={styles.slideHeader}>
-                                    <div className={styles.brandName}>The Eureka Feed</div>
-                                    <div className={styles.slideCount}>1 / {slideData.takeaways.length + 1}</div>
-                                </div>
-
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    {slideData.category && <div className={styles.paperCategory}>{slideData.category}</div>}
-                                    <div className={styles.hookHeadline}>
-                                        {slideData.headline}
+                        <div className={styles.slideWrapper}>
+                            <div
+                                className={`${styles.slide} ${styles.hookSlide}`}
+                                ref={(el) => { slideRefs.current[0] = el; }}
+                            >
+                                <div className={styles.slideBackground}></div>
+                                <div className={styles.slideContent} style={{ justifyContent: 'center' }}>
+                                    <div className={styles.slideHeader}>
+                                        <div className={styles.brandName}>The Eureka Feed</div>
+                                        <div className={styles.slideCount}>1 / {slideData.takeaways.length + 1}</div>
                                     </div>
-                                </div>
 
-                                <div className={styles.slideFooter}>
-                                    <div className={styles.footerWebsite}>theeurekafeed.com</div>
-                                    <div className={styles.footerSwipe}>Swipe <ArrowRight size={24} /></div>
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        {slideData.category && <div className={styles.paperCategory}>{slideData.category}</div>}
+                                        <div className={styles.hookHeadline}>
+                                            {slideData.headline}
+                                        </div>
+                                    </div>
+
+                                    <div className={styles.slideFooter}>
+                                        <div className={styles.footerWebsite}>theeurekafeed.com</div>
+                                        <div className={styles.footerSwipe}>Swipe <ArrowRight size={24} /></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Slides 2+: The Individual Takeaways */}
                         {slideData.takeaways.map((takeaway, idx) => (
-                            <div
-                                key={`takeaway-${idx}`}
-                                className={styles.slide}
-                                ref={(el) => { slideRefs.current[idx + 1] = el; }}
-                            >
-                                <div className={styles.slideBackground}></div>
-                                <div className={styles.slideContent}>
-                                    <div className={styles.slideHeader}>
-                                        <div className={styles.brandName}>The Eureka Feed</div>
-                                        <div className={styles.slideCount}>{idx + 2} / {slideData.takeaways.length + 1}</div>
-                                    </div>
-
-                                    <div className={styles.standaloneTakeawayWrapper}>
-                                        <div className={styles.standaloneTakeawayText}>
-                                            {takeaway}
+                            <div className={styles.slideWrapper} key={`takeaway-${idx}`}>
+                                <div
+                                    className={styles.slide}
+                                    ref={(el) => { slideRefs.current[idx + 1] = el; }}
+                                >
+                                    <div className={styles.slideBackground}></div>
+                                    <div className={styles.slideContent}>
+                                        <div className={styles.slideHeader}>
+                                            <div className={styles.brandName}>The Eureka Feed</div>
+                                            <div className={styles.slideCount}>{idx + 2} / {slideData.takeaways.length + 1}</div>
                                         </div>
-                                    </div>
 
-                                    <div className={styles.slideFooter}>
-                                        <div className={styles.footerWebsite}>theeurekafeed.com</div>
-                                        <div className={styles.footerSwipe}>
-                                            {idx === slideData.takeaways.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
+                                        <div className={styles.standaloneTakeawayWrapper}>
+                                            <div className={styles.standaloneTakeawayText}>
+                                                {takeaway}
+                                            </div>
+                                        </div>
+
+                                        <div className={styles.slideFooter}>
+                                            <div className={styles.footerWebsite}>theeurekafeed.com</div>
+                                            <div className={styles.footerSwipe}>
+                                                {idx === slideData.takeaways.length - 1 ? 'Listen to the full episode' : <><ArrowRight size={24} /> Swipe</>}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
