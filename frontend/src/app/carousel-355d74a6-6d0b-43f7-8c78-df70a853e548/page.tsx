@@ -399,19 +399,15 @@ export default function CarouselGenerator() {
                                     </div>
 
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
-                                        <div className={styles.hookHeadline} style={{ fontSize: '5.5rem', marginBottom: '20px' }}>
-                                            Deep Dive in Caption 📝
+                                        <div className={styles.hookHeadline} style={{ fontSize: '5.5rem', marginBottom: '40px' }}>
+                                            Check description for more information about the paper 👇
                                         </div>
 
-                                        <div className={styles.standaloneTakeawayText} style={{ fontSize: '2.8rem', marginBottom: '60px', opacity: 0.9 }}>
-                                            Check the description for more information about the paper.
-                                        </div>
-
-                                        <div style={{ padding: '40px 40px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
-                                            <div style={{ color: 'var(--text-secondary)', fontSize: '2rem', marginBottom: '15px' }}>
+                                        <div style={{ padding: '60px 40px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
+                                            <div style={{ color: 'var(--text-secondary)', fontSize: '2.8rem', marginBottom: '20px' }}>
                                                 We drop the latest research every single day.
                                             </div>
-                                            <div style={{ color: 'var(--accent)', fontSize: '2.5rem', fontWeight: '700', letterSpacing: '0.02em' }}>
+                                            <div style={{ color: 'var(--accent)', fontSize: '3rem', fontWeight: '700', letterSpacing: '0.02em' }}>
                                                 Follow @the.eureka.feed for more.
                                             </div>
                                         </div>
