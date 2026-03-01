@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, Loader2, ArrowRight, RefreshCw, FileText } from 'lucide-react';
+import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight } from 'lucide-react';
 import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, EpisodeDate, PodcastEpisode, Paper, CarouselSlide } from '@/lib/api';
 import styles from './page.module.css';
 
@@ -24,6 +24,7 @@ export default function CarouselGenerator() {
 
     const [error, setError] = useState<string | null>(null);
     const [downloading, setDownloading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     // Initial load of episodes
     useEffect(() => {
@@ -106,12 +107,22 @@ export default function CarouselGenerator() {
         }
     };
 
+    const handleCopy = () => {
+        if (!slideData) return;
+        const text = `🚨 New research just dropped!\n\n${slideData.headline}\n\n${slideData.caption || 'We break down the methodology, findings, and what it all means.'}\n\nListen to the full deep dive at theeurekafeed.com/episodes/${selectedSlug}\n\n#Science #Research #TheEurekaFeed`;
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     const handleDownloadAll = async () => {
         if (!slideRefs.current.length || !slideData) return;
         setDownloading(true);
 
         try {
-            const slugDate = episode?.episode_date || 'carousel';
+            const files: File[] = [];
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
             for (let i = 0; i < slideRefs.current.length; i++) {
                 const slideElement = slideRefs.current[i];
                 if (!slideElement) continue;
@@ -122,13 +133,41 @@ export default function CarouselGenerator() {
                     backgroundColor: '#0a0a0f', // var(--bg-primary)
                 });
 
-                const dataUrl = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = `paper-${slideData.paper_id}-slide-${i + 1}.png`;
-                link.href = dataUrl;
-                link.click();
+                if (isMobile && typeof navigator.share === 'function') {
+                    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+                    if (blob) {
+                        files.push(new File([blob], `paper-${slideData.paper_id}-slide-${i + 1}.png`, { type: 'image/png' }));
+                    }
+                } else {
+                    const dataUrl = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = `paper-${slideData.paper_id}-slide-${i + 1}.png`;
+                    link.href = dataUrl;
+                    link.click();
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                }
+            }
 
-                await new Promise((resolve) => setTimeout(resolve, 500));
+            if (isMobile && typeof navigator.share === 'function' && files.length > 0) {
+                try {
+                    await navigator.share({
+                        files: files,
+                        title: 'Instagram Carousel',
+                        text: 'Instagram Carousel Slides',
+                    });
+                } catch (shareError) {
+                    console.error('Error sharing', shareError);
+                    // Fallback to auto-trigger download links if share is cancelled/fails
+                    for (let i = 0; i < files.length; i++) {
+                        const url = URL.createObjectURL(files[i]);
+                        const link = document.createElement('a');
+                        link.download = files[i].name;
+                        link.href = url;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        await new Promise((resolve) => setTimeout(resolve, 500));
+                    }
+                }
             }
         } catch (err) {
             console.error('Error generating images', err);
@@ -216,6 +255,16 @@ export default function CarouselGenerator() {
             {selectedPaperId && slideData && !loadingSlide && (
                 <>
                     <div className={styles.copyContainer}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 style={{ margin: 0 }}>Instagram Caption</h3>
+                            <button
+                                onClick={handleCopy}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}
+                            >
+                                {copied ? <Check size={16} color="var(--accent)" /> : <Copy size={16} />}
+                                {copied ? <span style={{ color: 'var(--accent)' }}>Copied!</span> : 'Copy Text'}
+                            </button>
+                        </div>
                         <textarea
                             readOnly
                             className={styles.copyArea}
