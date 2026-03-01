@@ -398,13 +398,13 @@ export default function CarouselGenerator() {
                                         <div className={styles.slideCount}>{slideData.takeaways.length + 2} / {slideData.takeaways.length + 2}</div>
                                     </div>
 
-                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
-                                        <div className={styles.hookHeadline} style={{ fontSize: '5.5rem', marginBottom: '40px' }}>
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', gap: '60px' }}>
+                                        <div style={{ fontSize: '3.5rem', fontWeight: 600, color: '#ffffff', lineHeight: 1.3 }}>
                                             Check description for more information about the paper 👇
                                         </div>
 
-                                        <div style={{ padding: '60px 40px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
-                                            <div style={{ color: 'var(--text-secondary)', fontSize: '2.8rem', marginBottom: '20px' }}>
+                                        <div style={{ padding: '60px 50px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
+                                            <div style={{ color: '#ffffff', fontSize: '3.2rem', fontWeight: 600, marginBottom: '30px', lineHeight: 1.3 }}>
                                                 We drop the latest research every single day.
                                             </div>
                                             <div style={{ color: 'var(--accent)', fontSize: '3rem', fontWeight: '700', letterSpacing: '0.02em' }}>
