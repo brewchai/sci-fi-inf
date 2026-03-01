@@ -127,11 +127,41 @@ export default function CarouselGenerator() {
                 const slideElement = slideRefs.current[i];
                 if (!slideElement) continue;
 
-                const canvas = await html2canvas(slideElement, {
-                    scale: 2, // high resolution
+                // Create a pristine, isolated container to prevent html2canvas bounds/scaling issues
+                const cloneContainer = document.createElement('div');
+                Object.assign(cloneContainer.style, {
+                    position: 'fixed',
+                    top: '0',
+                    left: '0',
+                    width: '1080px',
+                    height: '1080px',
+                    zIndex: '-9999',
+                    opacity: '0.001',
+                    pointerEvents: 'none'
+                });
+
+                const clone = slideElement.cloneNode(true) as HTMLElement;
+                Object.assign(clone.style, {
+                    transform: 'none',
+                    position: 'relative',
+                    top: '0', left: '0', margin: '0',
+                    boxShadow: 'none'
+                });
+
+                cloneContainer.appendChild(clone);
+                document.body.appendChild(cloneContainer);
+
+                // Allow briefly for any DOM settling 
+                await new Promise((resolve) => setTimeout(resolve, 50));
+
+                const canvas = await html2canvas(clone, {
+                    scale: 2, // high resolution 2160x2160 output
                     useCORS: true,
                     backgroundColor: '#0a0a0f', // var(--bg-primary)
+                    logging: false
                 });
+
+                document.body.removeChild(cloneContainer);
 
                 if (isMobile && typeof navigator.share === 'function') {
                     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));

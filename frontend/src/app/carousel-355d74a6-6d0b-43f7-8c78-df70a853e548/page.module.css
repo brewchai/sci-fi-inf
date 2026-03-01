@@ -261,8 +261,13 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 80px 100px;
+    padding: 80px 140px;
+    /* Increased from 100px to 140px for IG Safe Zone */
     box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    /* Prevent text from escaping boundaries */
 }
 
 .slideHeader {
@@ -315,12 +320,20 @@
 
 /* Hook/Headline Text */
 .hookHeadline {
-    font-size: 6rem;
+    font-size: 5.5rem;
+    /* Shrink slightly to fit more text */
     font-weight: 800;
     font-family: var(--font-heading), sans-serif;
-    line-height: 1.1;
+    line-height: 1.15;
     color: #ffffff;
     margin-bottom: 40px;
+
+    /* Bulletproof text wrapping */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
+
     /* Subtle text shadow for depth */
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
@@ -340,6 +353,11 @@
     line-height: 1.4;
     color: #ffffff;
     font-weight: 500;
+
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
 }
 
 .slideFooter {
