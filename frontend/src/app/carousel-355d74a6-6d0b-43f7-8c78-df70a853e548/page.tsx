@@ -215,12 +215,20 @@ export default function CarouselGenerator() {
             {/* Slide Rendering */}
             {selectedPaperId && slideData && !loadingSlide && (
                 <>
-                    <div className={styles.controls} style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '3rem' }}>
+                    <div className={styles.copyContainer}>
+                        <h3>Instagram Caption</h3>
+                        <textarea
+                            readOnly
+                            className={styles.copyArea}
+                            value={`🚨 New research just dropped!\n\n${slideData.headline}\n\nWe break down the methodology, findings, and what it all means.\n\nListen to the full deep dive at theeurekafeed.com/episodes/${selectedSlug}\n\n#Science #Research #TheEurekaFeed`}
+                        />
+                    </div>
+
+                    <div className={styles.controls} style={{ display: 'flex', gap: '1rem', justifyContent: 'center', margin: '0 0 3rem 0' }}>
                         <button
-                            className={styles.downloadButton}
+                            className={styles.regenerateButton}
                             onClick={handleRegenerate}
                             disabled={downloading}
-                            style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}
                         >
                             <RefreshCw size={20} /> Regenerate Text
                         </button>
@@ -253,6 +261,7 @@ export default function CarouselGenerator() {
                                     </div>
 
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <div className={styles.newResearchBadge}>🚨 New Research Just Dropped</div>
                                         {slideData.category && <div className={styles.paperCategory}>{slideData.category}</div>}
                                         <div className={styles.hookHeadline}>
                                             {slideData.headline}
