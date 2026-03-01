@@ -392,27 +392,27 @@ export default function CarouselGenerator() {
                                 ref={(el) => { slideRefs.current[slideData.takeaways.length + 1] = el; }}
                             >
                                 <div className={styles.slideBackground}></div>
-                                <div className={styles.slideContent} style={{ justifyContent: 'center', textAlign: 'center' }}>
+                                <div className={styles.slideContent}>
                                     <div className={styles.slideHeader}>
                                         <div className={styles.brandName}>The Eureka Feed</div>
                                         <div className={styles.slideCount}>{slideData.takeaways.length + 2} / {slideData.takeaways.length + 2}</div>
                                     </div>
 
-                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                        <div className={styles.hookHeadline} style={{ fontSize: '6.5rem', marginBottom: '40px' }}>
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center' }}>
+                                        <div className={styles.hookHeadline} style={{ fontSize: '5.5rem', marginBottom: '20px' }}>
                                             Deep Dive in Caption 📝
                                         </div>
 
-                                        <div className={styles.standaloneTakeawayText} style={{ fontSize: '3.2rem', marginBottom: '100px', opacity: 0.9 }}>
-                                            Check the description for the full breakdown of this research.
+                                        <div className={styles.standaloneTakeawayText} style={{ fontSize: '2.8rem', marginBottom: '60px', opacity: 0.9 }}>
+                                            Check the description for more information about the paper.
                                         </div>
 
-                                        <div style={{ padding: '60px 40px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
-                                            <div style={{ color: 'var(--text-secondary)', fontSize: '2.2rem', marginBottom: '15px' }}>
-                                                We drop the latest scientific breakthroughs every single day.
+                                        <div style={{ padding: '40px 40px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
+                                            <div style={{ color: 'var(--text-secondary)', fontSize: '2rem', marginBottom: '15px' }}>
+                                                We drop the latest research every single day.
                                             </div>
-                                            <div style={{ color: 'var(--accent)', fontSize: '2.8rem', fontWeight: '700', letterSpacing: '0.02em' }}>
-                                                Follow @the.eureka.feed to stay ahead.
+                                            <div style={{ color: 'var(--accent)', fontSize: '2.5rem', fontWeight: '700', letterSpacing: '0.02em' }}>
+                                                Follow @the.eureka.feed for more.
                                             </div>
                                         </div>
                                     </div>
@@ -420,6 +420,9 @@ export default function CarouselGenerator() {
                                     {/* Footer without Swipe */}
                                     <div className={styles.slideFooter}>
                                         <div className={styles.footerWebsite}>theeurekafeed.com</div>
+                                        <div className={styles.footerSwipe} style={{ opacity: 0, pointerEvents: 'none' }}>
+                                            Swipe <ArrowRight size={24} />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
