@@ -216,11 +216,10 @@ export default function CarouselGenerator() {
             {selectedPaperId && slideData && !loadingSlide && (
                 <>
                     <div className={styles.copyContainer}>
-                        <h3>Instagram Caption</h3>
                         <textarea
                             readOnly
                             className={styles.copyArea}
-                            value={`🚨 New research just dropped!\n\n${slideData.headline}\n\nWe break down the methodology, findings, and what it all means.\n\nListen to the full deep dive at theeurekafeed.com/episodes/${selectedSlug}\n\n#Science #Research #TheEurekaFeed`}
+                            value={`🚨 New research just dropped!\n\n${slideData.headline}\n\n${slideData.caption || 'We break down the methodology, findings, and what it all means.'}\n\nListen to the full deep dive at theeurekafeed.com/episodes/${selectedSlug}\n\n#Science #Research #TheEurekaFeed`}
                         />
                     </div>
 

@@ -179,9 +179,10 @@ PAPER CONTENT:
                     "items": {"type": "string"},
                     "minItems": 3,
                     "maxItems": 5
-                }
+                },
+                "caption": {"type": "string"}
             },
-            "required": ["paper_id", "category", "headline", "takeaways"]
+            "required": ["paper_id", "category", "headline", "takeaways", "caption"]
         }
 
         user_prompt = f"""Generate engaging Instagram slides for the following paper.
@@ -194,13 +195,20 @@ Your task:
 2. `takeaways`: Create exactly 3 distinct, robust paragraphs that break down the paper's methodology, findings, and implications. 
    CRITICAL CONSTRAINT: Each takeaway MUST be an absolute maximum of 2 sentences long. 
    Do not use emojis. Explain the concept clearly but in a compelling way.
+3. `caption`: Write a 250–300+ word Instagram caption that explains exactly what is happening in the academic paper provided.
+   - Your job is to clearly unpack the core argument, the mechanism being proposed, the methodology used, and the main conclusions drawn.
+   - Clearly state the research question, explain how the authors approach it, describe the key findings and clarify why those findings matter.
+   - Briefly address any assumptions, limitations, or implications discussed in the paper.
+   - Be precise. Use technical language where necessary, but explain it in a way that an intelligent non-expert can follow. 
+   - Avoid fluff, emotional language, or inspirational framing. This is about intellectual transparency. No emojis. Write in coherent, well-developed paragraphs.
 
 Ensure your response is a valid JSON object matching this schema:
 {{
   "paper_id": 123,
   "category": "SPACE",
   "headline": "A highly engaging hook here",
-  "takeaways": ["First point... (max 2 sentences).", "Second point... (max 2 sentences).", "Third point... (max 2 sentences)."]
+  "takeaways": ["First point... (max 2 sentences).", "Second point... (max 2 sentences).", "Third point... (max 2 sentences)."],
+  "caption": "Your 250-300+ word rigorous academic breakdown of the paper goes here, following all guidelines..."
 }}
 
 PAPER CONTENT:
@@ -239,5 +247,6 @@ PAPER CONTENT:
                     "Failed to generate text. Listen to the episode.",
                     "Failed to generate text.",
                     "Failed to generate text."
-                ]
+                ],
+                "caption": "Failed to generate AI caption for this paper."
             }

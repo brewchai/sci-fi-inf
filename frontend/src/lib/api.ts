@@ -46,6 +46,7 @@ export type CarouselSlide = {
     category: string;
     headline: string;
     takeaways: string[];
+    caption?: string;
 };
 
 export async function fetchCategories(): Promise<Category[]> {
