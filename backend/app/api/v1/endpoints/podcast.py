@@ -153,6 +153,7 @@ class CarouselSlideResponse(BaseModel):
     category: str
     headline: str
     takeaways: List[str]
+    caption: Optional[str] = None
 
 
 @router.post(
@@ -192,7 +193,8 @@ async def generate_carousel_for_episode(
             paper_id=slide.get("paper_id", 0),
             category=slide.get("category", "SCIENCE"),
             headline=slide.get("headline", "Read about this amazing discovery"),
-            takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"])
+            takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"]),
+            caption=slide.get("caption")
         ) for slide in slides
     ]
 
@@ -227,7 +229,8 @@ async def generate_carousel_for_paper(
         paper_id=slide.get("paper_id", paper_id),
         category=slide.get("category", paper.category_slug or "SCIENCE"),
         headline=slide.get("headline", paper.headline or paper.title),
-        takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"])
+        takeaways=slide.get("takeaways", ["Listen to the full episode to learn more"]),
+        caption=slide.get("caption")
     )
 
 
