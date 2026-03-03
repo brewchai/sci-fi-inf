@@ -193,3 +193,34 @@ export async function fetchHarvestedTweets(): Promise<SocialPost[]> {
     if (!res.ok) throw new Error('Failed to fetch tweets');
     return res.json();
 }
+
+// Audiogram Generation
+export type AudiogramResponse = {
+    video_url: string;
+    episode_id: number;
+    duration_seconds: number;
+};
+
+export async function generateAudiogramSlide(
+    episodeId: number,
+    headline: string,
+    category: string = 'NEW RESEARCH',
+    startSeconds: number = 0,
+    durationSeconds: number = 8,
+): Promise<AudiogramResponse> {
+    const res = await fetch(`${API_URL}/podcast/episode/${episodeId}/generate-audiogram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            headline,
+            category,
+            start_seconds: startSeconds,
+            duration_seconds: durationSeconds,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Audiogram generation failed: ${err}`);
+    }
+    return res.json();
+}

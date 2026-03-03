@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, EpisodeDate, PodcastEpisode, Paper, CarouselSlide } from '@/lib/api';
+import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight, Music } from 'lucide-react';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateAudiogramSlide, EpisodeDate, PodcastEpisode, Paper, CarouselSlide } from '@/lib/api';
 import styles from './page.module.css';
 
 export default function CarouselGenerator() {
@@ -25,6 +25,14 @@ export default function CarouselGenerator() {
     const [error, setError] = useState<string | null>(null);
     const [downloading, setDownloading] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    // Audiogram state
+    const [audiogramUrl, setAudiogramUrl] = useState<string | null>(null);
+    const [generatingAudiogramSlide, setGeneratingAudiogramSlide] = useState(false);
+    const [audiogramError, setAudiogramError] = useState<string | null>(null);
+    const [audioStart, setAudioStart] = useState(0);
+    const [audioDuration, setAudioDuration] = useState(8);
+    const [audiogramHeadline, setAudiogramHeadline] = useState('');
 
     // Initial load of episodes
     useEffect(() => {
@@ -87,6 +95,8 @@ export default function CarouselGenerator() {
 
             const slide = await fetchPaperCarouselContent(paperId);
             setSlideData(slide);
+            // Auto-fill audiogram headline from slide data
+            if (slide.headline) setAudiogramHeadline(slide.headline);
             setTimeout(() => { slideRefs.current = []; }, 0); // clear refs on new data
         } catch (err) {
             console.error(err);
@@ -215,6 +225,45 @@ export default function CarouselGenerator() {
             day: 'numeric',
         });
     };
+
+    // Audiogram generation
+    const handleGenerateAudiogramSlide = async () => {
+        if (!episode || !audiogramHeadline.trim()) return;
+        setGeneratingAudiogramSlide(true);
+        setAudiogramError(null);
+        setAudiogramUrl(null);
+        try {
+            const result = await generateAudiogramSlide(
+                episode.id,
+                audiogramHeadline,
+                slideData?.category || 'NEW RESEARCH',
+                audioStart,
+                audioDuration,
+            );
+            setAudiogramUrl(result.video_url);
+        } catch (err: any) {
+            setAudiogramError(err.message || 'Failed to generate audiogram');
+        } finally {
+            setGeneratingAudiogramSlide(false);
+        }
+    };
+
+    // Parse transcript into sentences with estimated timestamps
+    // Approx 150 words per minute = 2.5 words per second
+    const transcriptSentences = (() => {
+        if (!episode?.script) return [];
+        const sentences = episode.script
+            .split(/(?<=[.!?])\s+/)
+            .filter(s => s.trim().length > 0);
+        let wordsSoFar = 0;
+        return sentences.map(sentence => {
+            const startSec = Math.round(wordsSoFar / 2.5);
+            const wordCount = sentence.split(/\s+/).length;
+            wordsSoFar += wordCount;
+            const endSec = Math.round(wordsSoFar / 2.5);
+            return { text: sentence, startSec, endSec };
+        });
+    })();
 
     return (
         <main className={styles.main}>
@@ -425,6 +474,201 @@ export default function CarouselGenerator() {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* Audiogram Generator — appears once an episode is selected (independent of slides) */}
+            {episode && (
+                <div style={{
+                    marginTop: '3rem',
+                    padding: '2rem',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '16px',
+                    border: '1px solid var(--border)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <Music size={24} style={{ color: 'var(--accent)' }} />
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Audiogram Slide 1</h2>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                        Generate a video version of Slide 1 with your podcast audio and an animated waveform.
+                        Click on any sentence in the transcript below to set the start time.
+                    </p>
+
+                    {/* Transcript viewer */}
+                    {transcriptSentences.length > 0 && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Episode Transcript</label>
+                            <div style={{
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                padding: '1rem',
+                                background: 'var(--bg-primary)',
+                                borderRadius: '10px',
+                                border: '1px solid var(--border)',
+                                fontSize: '0.9rem',
+                                lineHeight: 1.7,
+                            }}>
+                                {transcriptSentences.map((s, i) => {
+                                    const isInRange = s.startSec >= audioStart && s.startSec < audioStart + audioDuration;
+                                    return (
+                                        <span
+                                            key={i}
+                                            onClick={() => setAudioStart(s.startSec)}
+                                            style={{
+                                                cursor: 'pointer',
+                                                color: isInRange ? 'var(--accent)' : 'var(--text-secondary)',
+                                                fontWeight: isInRange ? 600 : 400,
+                                                transition: 'color 0.2s',
+                                                borderBottom: isInRange ? '1px solid var(--accent)' : 'none',
+                                            }}
+                                            title={`Starts at ~${s.startSec}s`}
+                                        >
+                                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.5, marginRight: '4px' }}>
+                                                {Math.floor(s.startSec / 60)}:{String(s.startSec % 60).padStart(2, '0')}
+                                            </span>
+                                            {s.text}{' '}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {!episode.audio_url ? (
+                        <p style={{ color: '#ff6b6b' }}>⚠ This episode has no audio URL. Generate the podcast first.</p>
+                    ) : (
+                        <>
+                            {/* Headline input */}
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Headline text</label>
+                                <input
+                                    type="text"
+                                    value={audiogramHeadline}
+                                    onChange={(e) => setAudiogramHeadline(e.target.value)}
+                                    placeholder="Enter your headline for the audiogram..."
+                                    style={{
+                                        padding: '0.6rem 0.8rem',
+                                        fontSize: '1rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid var(--border)',
+                                        background: 'var(--bg-primary)',
+                                        color: 'var(--text-primary)',
+                                        width: '100%',
+                                        maxWidth: '500px',
+                                        fontFamily: 'inherit',
+                                    }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Start time (seconds)</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={audioStart}
+                                        onChange={(e) => setAudioStart(Math.max(0, Number(e.target.value)))}
+                                        style={{
+                                            padding: '0.6rem 0.8rem',
+                                            fontSize: '1rem',
+                                            borderRadius: '8px',
+                                            border: '1px solid var(--border)',
+                                            background: 'var(--bg-primary)',
+                                            color: 'var(--text-primary)',
+                                            width: '120px',
+                                            fontFamily: 'inherit',
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Duration (seconds)</label>
+                                    <input
+                                        type="number"
+                                        min={3}
+                                        max={30}
+                                        step={1}
+                                        value={audioDuration}
+                                        onChange={(e) => setAudioDuration(Math.min(30, Math.max(3, Number(e.target.value))))}
+                                        style={{
+                                            padding: '0.6rem 0.8rem',
+                                            fontSize: '1rem',
+                                            borderRadius: '8px',
+                                            border: '1px solid var(--border)',
+                                            background: 'var(--bg-primary)',
+                                            color: 'var(--text-primary)',
+                                            width: '120px',
+                                            fontFamily: 'inherit',
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleGenerateAudiogramSlide}
+                                disabled={generatingAudiogramSlide}
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    fontSize: '1rem',
+                                    fontWeight: 600,
+                                    borderRadius: '10px',
+                                    border: 'none',
+                                    background: 'var(--accent)',
+                                    color: '#000',
+                                    cursor: generatingAudiogramSlide ? 'wait' : 'pointer',
+                                    opacity: generatingAudiogramSlide ? 0.6 : 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                }}
+                            >
+                                {generatingAudiogramSlide ? (
+                                    <><Loader2 size={18} className="animate-spin" /> Generating...</>
+                                ) : (
+                                    <><Music size={18} /> Generate Audiogram Slide</>
+                                )}
+                            </button>
+
+                            {audiogramError && (
+                                <p style={{ color: '#ff6b6b', marginTop: '1rem' }}>❌ {audiogramError}</p>
+                            )}
+
+                            {audiogramUrl && (
+                                <div style={{ marginTop: '1.5rem' }}>
+                                    <video
+                                        src={audiogramUrl}
+                                        controls
+                                        autoPlay
+                                        style={{
+                                            width: '432px',
+                                            height: '432px',
+                                            borderRadius: '12px',
+                                            background: '#000',
+                                        }}
+                                    />
+                                    <div style={{ marginTop: '1rem' }}>
+                                        <a
+                                            href={audiogramUrl}
+                                            download={`audiogram-slide1.mp4`}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.6rem 1.2rem',
+                                                background: 'var(--bg-tertiary)',
+                                                color: 'var(--text-primary)',
+                                                borderRadius: '8px',
+                                                textDecoration: 'none',
+                                                fontWeight: 600,
+                                                fontSize: '0.95rem',
+                                            }}
+                                        >
+                                            <Download size={16} /> Download Audiogram
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
             )}
         </main>
     );

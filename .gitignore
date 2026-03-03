@@ -48,3 +48,6 @@ alembic/versions/*.pyc
 htmlcov/
 
 .npm-cache
+
+frontend/public/static/audiograms/
+

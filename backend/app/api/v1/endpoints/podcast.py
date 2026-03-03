@@ -234,6 +234,70 @@ async def generate_carousel_for_paper(
     )
 
 
+# =============================================================================
+# Audiogram Generation
+# =============================================================================
+
+class GenerateAudiogramRequest(BaseModel):
+    """Request to generate an audiogram video slide."""
+    headline: str = Field(..., description="Title headline for the slide")
+    category: str = Field(default="NEW RESEARCH", description="Category label")
+    start_seconds: float = Field(default=0, description="Start time in the audio")
+    duration_seconds: float = Field(default=8, description="Clip duration in seconds")
+
+
+class AudiogramResponse(BaseModel):
+    """Response with the generated audiogram video URL."""
+    video_url: str
+    episode_id: int
+    duration_seconds: float
+
+
+@router.post(
+    "/episode/{episode_id}/generate-audiogram",
+    response_model=AudiogramResponse,
+    summary="Generate an audiogram video for carousel Slide 1",
+)
+async def generate_audiogram(
+    episode_id: int,
+    request: GenerateAudiogramRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AudiogramResponse:
+    """
+    Generate a 1080x1080 video with animated waveform + title + audio
+    for use as Slide 1 in an Instagram carousel.
+    """
+    from app.services.audiogram_generator import AudiogramGenerator
+
+    # Look up episode
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if not episode.audio_url:
+        raise HTTPException(status_code=400, detail="Episode has no audio")
+
+    generator = AudiogramGenerator()
+    video_url = await generator.generate(
+        episode_id=episode_id,
+        audio_url=episode.audio_url,
+        headline=request.headline,
+        category=request.category,
+        start_seconds=request.start_seconds,
+        duration_seconds=request.duration_seconds,
+    )
+
+    return AudiogramResponse(
+        video_url=video_url,
+        episode_id=episode_id,
+        duration_seconds=request.duration_seconds,
+    )
+
+
 @router.post(
     "/backfill-slugs",
     summary="Backfill slugs for existing episodes",
