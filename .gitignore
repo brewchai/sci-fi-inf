@@ -16,6 +16,7 @@ out/
 dist/
 build/
 *.egg-info/
+frontend/tsconfig.tsbuildinfo
 
 # IDE
 .idea/
@@ -39,6 +40,7 @@ npm-debug.log*
 # Temporary files
 /tmp/
 *.tmp
+backend/output.json
 
 # Alembic
 alembic/versions/*.pyc
@@ -50,4 +52,5 @@ htmlcov/
 .npm-cache
 
 frontend/public/static/audiograms/
-
+backend/static/audio_previews/
+backend/static/carousel_images/
