@@ -5,7 +5,8 @@ Provides endpoints for generating and retrieving podcast episodes.
 """
 from datetime import date, timedelta, datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,24 +207,41 @@ async def generate_carousel_for_episode(
 )
 async def generate_carousel_for_paper(
     paper_id: int,
+    content_type: str = Query("latest", description="Controls generation framing ('latest', 'top-scientists', etc)"),
     db: AsyncSession = Depends(get_db),
 ) -> CarouselSlideResponse:
     """Generates robust, multi-sentence slides for a single paper."""
     from app.services.carousel import CarouselGenerator
+    from app.services.editor import EditorEngine
     from app.models.paper import Paper
+    from app.models.top_paper import TopPaper
+    from app.models.daily_science_paper import DailySciencePaper
     
-    # 1. Fetch Paper
-    result = await db.execute(
-        select(Paper).where(Paper.id == paper_id)
-    )
-    paper = result.scalar_one_or_none()
+    paper = None
+    if content_type == "top-papers":
+        result = await db.execute(select(TopPaper).where(TopPaper.id == paper_id))
+        paper = result.scalar_one_or_none()
+    elif content_type == "daily-science":
+        result = await db.execute(select(DailySciencePaper).where(DailySciencePaper.id == paper_id))
+        paper = result.scalar_one_or_none()
+
+    if not paper:
+        result = await db.execute(select(Paper).where(Paper.id == paper_id))
+        paper = result.scalar_one_or_none()
     
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
         
-    # 2. Generate Carousel Format
+    # 2. On-demand Summarization (Phase 3)
+    if not paper.eli5_summary or not paper.key_takeaways:
+        editor = EditorEngine(db)
+        await editor.generate_summary(paper)
+        await db.commit()
+        await db.refresh(paper)
+
+    # 3. Generate Carousel Format
     carousel_generator = CarouselGenerator(db)
-    slide = await carousel_generator.generate_paper_carousel_content(paper)
+    slide = await carousel_generator.generate_paper_carousel_content(paper, content_type)
     
     return CarouselSlideResponse(
         paper_id=slide.get("paper_id", paper_id),
@@ -244,6 +262,7 @@ class GenerateAudiogramRequest(BaseModel):
     category: str = Field(default="NEW RESEARCH", description="Category label")
     start_seconds: float = Field(default=0, description="Start time in the audio")
     duration_seconds: float = Field(default=8, description="Clip duration in seconds")
+    custom_text: Optional[str] = Field(default=None, description="If provided, generate fresh HD TTS audio from this text instead of using episode audio")
 
 
 class AudiogramResponse(BaseModel):
@@ -289,6 +308,7 @@ async def generate_audiogram(
         category=request.category,
         start_seconds=request.start_seconds,
         duration_seconds=request.duration_seconds,
+        custom_text=request.custom_text,
     )
 
     return AudiogramResponse(
@@ -297,6 +317,188 @@ async def generate_audiogram(
         duration_seconds=request.duration_seconds,
     )
 
+
+# =============================================================================
+# Reel Script Generation
+# =============================================================================
+
+class ReelScriptResponse(BaseModel):
+    """Response with generated reel narration script."""
+    script: str
+    headline: str
+
+
+@router.post(
+    "/paper/{paper_id}/generate-reel-script",
+    response_model=ReelScriptResponse,
+    summary="Generate a reel narration script for a paper",
+)
+async def generate_reel_script(
+    paper_id: int,
+    content_type: str = Query("latest", description="Controls generation framing"),
+    db: AsyncSession = Depends(get_db),
+) -> ReelScriptResponse:
+    """
+    Generate a ~30-second hook-driven narration script
+    optimised for Instagram Reels from a paper's metadata.
+    """
+    from app.services.reel_script_generator import ReelScriptGenerator
+    from app.models.paper import Paper
+    from app.models.top_paper import TopPaper
+    from app.models.daily_science_paper import DailySciencePaper
+
+    paper = None
+    if content_type == "top-papers":
+        result = await db.execute(select(TopPaper).where(TopPaper.id == paper_id))
+        paper = result.scalar_one_or_none()
+    elif content_type == "daily-science":
+        result = await db.execute(select(DailySciencePaper).where(DailySciencePaper.id == paper_id))
+        paper = result.scalar_one_or_none()
+
+    if not paper:
+        result = await db.execute(select(Paper).where(Paper.id == paper_id))
+        paper = result.scalar_one_or_none()
+
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    generator = ReelScriptGenerator()
+    script_data = await generator.generate(paper, content_type)
+
+    return ReelScriptResponse(
+        script=script_data["script"],
+        headline=script_data["headline"],
+    )
+
+
+# =============================================================================
+# Reel Generation
+# =============================================================================
+
+class TimelineEvent(BaseModel):
+    image_url: str = Field(..., description="The raw AI Image generation URL")
+    start_time_seconds: float = Field(..., description="The exact float timestamp this image should appear based on the spoken Anchor Word")
+    effect_transition_name: Optional[str] = Field(default=None, description="Named transition/effect selected from AI Director guidance")
+
+class GenerateReelRequest(BaseModel):
+    """Request to generate a vertical waveform reel."""
+    headline: str = Field(..., description="Hook headline for the reel")
+    start_seconds: float = Field(default=0, description="Start time in the audio")
+    duration_seconds: float = Field(default=30, description="Reel duration in seconds")
+    custom_text: Optional[str] = Field(default=None, description="If provided, generate fresh HD TTS audio unless audio_url is given")
+    audio_url: Optional[str] = Field(default=None, description="Pre-compiled TTS audio URL, skips TTS generation")
+    closing_statement: Optional[str] = Field(default=None, description="Closing CTA statement to append at the end")
+    background_video_url: Optional[str] = Field(default=None, description="URL to an optional background video to loop behind the reel")
+    overlay_video_url: Optional[str] = Field(default=None, description="URL to an optional overlay video to place on top (via screen/colorkey)")
+    voice: str = Field(default="nova", description="TTS voice: nova, onyx, or fable (OpenAI) / brian, matilda, charlie, dave, lily, adam (ElevenLabs)")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="TTS speed (0.5–2.0)")
+    elevenlabs_stability: float = Field(default=0.3, ge=0.0, le=1.0, description="ElevenLabs stability setting")
+    elevenlabs_similarity_boost: float = Field(default=0.75, ge=0.0, le=1.0, description="ElevenLabs similarity boost setting")
+    elevenlabs_style: float = Field(default=0.4, ge=0.0, le=1.0, description="ElevenLabs style exaggeration setting")
+    tts_provider: str = Field(default="openai", description="TTS provider: openai or elevenlabs", pattern="^(openai|elevenlabs)$")
+    auto_visuals: bool = Field(default=False, description="Auto-fetch relevant stock footage from Pexels as background")
+    background_clip_urls: Optional[List[str]] = Field(default=None, description="User-approved Pexels clip URLs in order (from Fetch visuals flow)")
+    anchor_timeline: Optional[List[TimelineEvent]] = Field(default=None, description="Exact spoken-word timeline for explicit AI image pacing")
+    word_timestamps: Optional[List[dict]] = Field(default=None, description="Pre-computed Whisper word timestamps to skip regeneration")
+    include_waveform: bool = Field(default=True, description="Whether to render the animated waveform overlay")
+
+
+class ReelResponse(BaseModel):
+    """Response with the generated reel video URL."""
+    video_url: str
+    episode_id: int
+    duration_seconds: float
+
+
+@router.post(
+    "/episode/{episode_id}/generate-reel",
+    response_model=ReelResponse,
+    summary="Generate a vertical waveform reel",
+)
+async def generate_reel(
+    episode_id: int,
+    request: GenerateReelRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ReelResponse:
+    """
+    Generate a 1080x1920 vertical reel with animated waveform,
+    word-by-word captions, and transitions.
+    """
+    from app.services.reel_generator import ReelGenerator
+
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if not episode.audio_url and not request.custom_text:
+        raise HTTPException(status_code=400, detail="Episode has no audio and no custom text provided")
+
+    # Background clips: user-approved URLs (from Fetch visuals) take priority
+    clip_paths = None
+    if request.background_clip_urls and len(request.background_clip_urls) > 0:
+        from app.services.visual_search import download_clips_from_urls
+        clip_paths = await download_clips_from_urls(request.background_clip_urls)
+    elif request.auto_visuals:
+        logger.info("Auto-visuals enabled: fetching Pexels stock footage")
+        from app.services.visual_search import extract_visual_keywords, search_stock_clips, download_clip
+        headline = request.headline or ""
+        script = request.custom_text or (episode.script or "")
+        if headline or script:
+            keywords = await extract_visual_keywords(headline, script)
+            if keywords:
+                clips = await search_stock_clips(keywords, orientation="portrait")
+                if clips:
+                    paths = []
+                    for clip in clips:
+                        try:
+                            path = await download_clip(clip)
+                            paths.append(path)
+                        except Exception as e:
+                            logger.error(f"Failed to download clip '{clip.keyword}': {e}")
+                    if paths:
+                        clip_paths = paths
+
+    temp_clip_paths = clip_paths or []
+
+    try:
+        generator = ReelGenerator()
+        video_url = await generator.generate(
+            episode_id=episode_id,
+            audio_url=episode.audio_url or "",
+            headline=request.headline,
+            start_seconds=request.start_seconds,
+            duration_seconds=request.duration_seconds,
+            custom_text=request.custom_text,
+            closing_statement=request.closing_statement,
+            background_video_url=request.background_video_url if not clip_paths else None,
+            overlay_video_url=request.overlay_video_url,
+            background_clip_paths=clip_paths,
+            anchor_timeline=request.anchor_timeline,
+            voice=request.voice,
+            speed=request.speed,
+            elevenlabs_stability=request.elevenlabs_stability,
+            elevenlabs_similarity_boost=request.elevenlabs_similarity_boost,
+            elevenlabs_style=request.elevenlabs_style,
+            tts_provider=request.tts_provider,
+            include_waveform=request.include_waveform,
+        )
+    finally:
+        import os
+        for p in temp_clip_paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    return ReelResponse(
+        video_url=video_url,
+        episode_id=episode_id,
+        duration_seconds=request.duration_seconds,
+    )
 
 @router.post(
     "/backfill-slugs",

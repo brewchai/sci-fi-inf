@@ -1,0 +1,54 @@
+[
+    {
+      "transition_name": "displacement",
+      "guidance": "Invokes a high-tech, disruptive emotion, revealing the 'matrix' or underlying mechanics. Use when going from a tangible, real-world subject to its underlying digital data, theoretical concept, or hidden mechanism."
+    },
+    {
+      "transition_name": "SimpleZoom",
+      "guidance": "Invokes an energetic, highly focused, 'diving deep' emotion. Use when going from a broad overview or establishing concept directly into a highly detailed, granular breakdown or core fact."
+    },
+    {
+      "transition_name": "LinearBlur",
+      "guidance": "Invokes a feeling of extreme speed, whiplash, and rapid progression. Use when going from a slow-paced historical timeline or old tech whipping instantly into a fast-paced, modern-day application."
+    },
+    {
+      "transition_name": "GlitchMemories",
+      "guidance": "Invokes a cyberpunk, corrupted data, or sudden realization emotion, like 'hacking' the truth. Use when going from a common misconception, myth, or political talking point glitching sharply into the surprising truth, 'plot twist', or hard data."
+    },
+    {
+      "transition_name": "luminance_melt",
+      "guidance": "Invokes an organic, fluid, and mysterious transformation. Use when going from State A of a system/organism melting seamlessly into State B to show a natural evolution, passage of time, or biological/chemical change."
+    },
+    {
+      "transition_name": "directionalwarp",
+      "guidance": "Invokes aggressive velocity, space bending, and a forced perspective shift. Use when going from a posed problem, mystery, or question warping instantly into a fast, high-impact solution or definitive answer."
+    },
+    {
+      "transition_name": "CrossZoom",
+      "guidance": "Invokes high impact, adrenaline, and a mind-blowing scale change. Use when going from a standard, human-level perspective zooming violently into an extreme macro or extreme outward scale."
+    },
+    {
+      "transition_name": "Dreamy",
+      "guidance": "Invokes a surreal, psychological emotion, questioning reality. Use when going from a concrete, proven physical reality waving into an abstract hypothesis, future prediction, or AI simulation."
+    },
+    {
+      "transition_name": "undulatingBurnOut",
+      "guidance": "Invokes an explosive, radiating energy, representing a catastrophic or highly volatile event. Use when going from the slow build-up of tension or a stable system into an explosive climax, chaotic reaction, or systemic collapse."
+    },
+    {
+      "transition_name": "Burn",
+      "guidance": "Invokes overwhelming brightness, intense heat, and a 'flash' of clarity. Use when going from a dark, confusing, or unknown variable flashing brightly into a sudden 'lightbulb' moment of clarity or a shocking revelation."
+    },
+    {
+      "transition_name": "colorphase",
+      "guidance": "Invokes a psychedelic, spectrum shift, like looking through a new lens. Use when going from the standard, surface-level view of a topic shifting rapidly into an alternative viewpoint, hidden layer, or an 'under the hood' perspective."
+    },
+    {
+      "transition_name": "fadecolor",
+      "guidance": "Invokes a clean break, finality, and acts as a palate cleanser. Use when going from the heavy conclusion of a complex topic/segment fading cleanly to introduce a completely new chapter, drastic tone shift, or a hopeful resolution."
+    },
+    {
+      "transition_name": "squeeze",
+      "guidance": "Invokes extreme pressure, consolidation, and forcing things together. Use when going from a broad, chaotic set of data or multiple variables compressing violently down into a single, dense, unifying conclusion or root cause."
+    }
+  ]

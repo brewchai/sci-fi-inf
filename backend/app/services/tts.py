@@ -26,7 +26,7 @@ class TTSGenerator:
     """
     
     DEFAULT_VOICE = "nova"
-    DEFAULT_MODEL = "tts-1"  # Use "tts-1-hd" for higher quality
+    DEFAULT_MODEL = "tts-1-hd"  # Higher quality, more natural sounding
     
     def __init__(self):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
@@ -36,6 +36,7 @@ class TTSGenerator:
         text: str,
         voice: str = DEFAULT_VOICE,
         model: str = DEFAULT_MODEL,
+        speed: float = 1.0,
     ) -> bytes:
         """
         Generate audio from text.
@@ -54,6 +55,7 @@ class TTSGenerator:
             model=model,
             voice=voice,
             input=text,
+            speed=speed,
         )
         
         # Get audio bytes

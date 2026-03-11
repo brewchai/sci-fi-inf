@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 from app.core.config import settings
 
 from contextlib import asynccontextmanager
@@ -10,6 +12,8 @@ from app.models.podcast import PodcastEpisode  # noqa: F401
 from app.models.contact import ContactMessage  # noqa: F401
 from app.models.waitlist import WaitlistEmail  # noqa: F401
 from app.models.cron_run import CronRun  # noqa: F401
+from app.models.top_paper import TopPaper  # noqa: F401
+from app.models.daily_science_paper import DailySciencePaper  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,8 +67,9 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist, cron, social
+    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist, cron, social, content
     application.include_router(papers.router, prefix="/api/v1/papers", tags=["papers"])
+    application.include_router(content.router, prefix="/api/v1/content", tags=["content"])
     application.include_router(podcast.router, prefix="/api/v1", tags=["podcast"])
     application.include_router(admin.router, prefix="/api/v1", tags=["admin"])
     application.include_router(contact.router, prefix="/api/v1", tags=["contact"])
@@ -72,10 +77,28 @@ def create_application() -> FastAPI:
     application.include_router(cron.router, prefix="/api/v1", tags=["cron"])
     application.include_router(social.router, prefix="/api/v1/social", tags=["social"])
 
+    # Static files for AI generated images (with CORS headers so frontend can download/fetch them via canvas)
+    static_path = os.path.join(os.getcwd(), "static")
+    if not os.path.exists(static_path):
+        os.makedirs(static_path)
+        
+    class CORSStaticFiles(StaticFiles):
+        def is_not_modified(self, response_headers, request_headers) -> bool:
+            return False
+            
+        async def get_response(self, path: str, scope):
+            response = await super().get_response(path, scope)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            return response
+
+    application.mount("/static", CORSStaticFiles(directory=static_path), name="static")
+
     return application
 
 
 app = create_application()
+# Keep an `application` alias for ASGI servers configured with `app.main:application`.
+application = app
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def root():
