@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favicon DVD Bounce</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #111;
+            overflow: hidden;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            background-color: black;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 9 / 16;
+            object-fit: contain;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        #ui {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #333;
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+
+        button.secondary {
+            background-color: transparent;
+            color: #ccc;
+            border-color: #666;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #555;
+            transform: translateY(-2px);
+        }
+
+        button.secondary:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-color: white;
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background-color: #222;
+            color: #888;
+            border-color: #888;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="ui">
+        <button id="testBtn" class="secondary">10 Sec Test</button>
+        <button id="recordBtn">Generate 2-Minute Video</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const recordBtn = document.getElementById('recordBtn');
+        const testBtn = document.getElementById('testBtn');
+
+        // Logical native resolution (1080x1920) for 1080p 9:16 video
+        const width = 1080;
+        const height = 1920;
+        canvas.width = width;
+        canvas.height = height;
+
+        const img = new Image();
+        img.src = '/favicon.png';
+
+        // Larger favicon for 1080p canvas
+        const size = 200;
+        let x = Math.random() * (width - size);
+        let y = Math.random() * (height - size);
+
+        // Ultra-slow classic DVD screensaver pace (around 2 to 3.5 speed)
+        let speed = 2 + Math.random() * 1.5;
+        let angle = Math.random() * Math.PI * 2;
+        let dx = Math.cos(angle) * speed;
+        let dy = Math.sin(angle) * speed;
+
+        let isSuspense = false;
+        let suspenseTimer = 0;
+
+        function update() {
+            // Suspense logic (when favicon corner gets within ~10px of screen corners)
+            const nearCorner =
+                (x < 10 && y < 10) ||                               // Top-Left
+                (width - (x + size) < 10 && y < 10) ||              // Top-Right
+                (x < 10 && height - (y + size) < 10) ||             // Bottom-Left
+                (width - (x + size) < 10 && height - (y + size) < 10); // Bottom-Right
+
+            if (nearCorner && !isSuspense) {
+                isSuspense = true;
+                suspenseTimer = performance.now();
+            }
+
+            let currentSpeedMult = 1;
+
+            if (isSuspense) {
+                const elapsed = performance.now() - suspenseTimer;
+                // Apply suspense slowdown (0.5 to 1 second)
+                if (elapsed < 800) {
+                    currentSpeedMult = 0.3; // Dramatic slowdown
+                } else {
+                    isSuspense = false;
+                }
+            }
+
+            x += dx * currentSpeedMult;
+            y += dy * currentSpeedMult;
+
+            let bounced = false;
+
+            // Collision with left/right walls
+            if (x <= 0) {
+                x = 0;
+                dx = Math.abs(dx);
+                bounced = true;
+            } else if (x + size >= width) {
+                x = width - size;
+                dx = -Math.abs(dx);
+                bounced = true;
+            }
+
+            // Collision with top/bottom walls
+            if (y <= 0) {
+                y = 0;
+                dy = Math.abs(dy);
+                bounced = true;
+            } else if (y + size >= height) {
+                y = height - size;
+                dy = -Math.abs(dy);
+                bounced = true;
+            }
+
+            if (bounced) {
+                // Randomize speed slightly on bounce (kept ultra slow)
+                speed = 1.5 + Math.random() * 2;
+
+                // Add slight random angle variation (-15 to 15 degrees) to keep it unpredictable
+                let currentAngle = Math.atan2(dy, dx);
+                currentAngle += (Math.random() - 0.5) * 0.5;
+
+                dx = Math.cos(currentAngle) * speed;
+                dy = Math.sin(currentAngle) * speed;
+
+                // Ensure it doesn't get stuck moving perfectly horizontal or vertical
+                if (Math.abs(dx) < 1) dx = dx < 0 ? -1.5 : 1.5;
+                if (Math.abs(dy) < 1) dy = dy < 0 ? -1.5 : 1.5;
+            }
+        }
+
+        function draw() {
+            // Draw pure black background
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw image when loaded
+            if (img.complete && img.naturalHeight !== 0) {
+                // Disable smoothing for sharp pixelated favicon scaling
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(img, x, y, size, size);
+            }
+        }
+
+        let isRunning = true;
+
+        function loop() {
+            if (!isRunning) return;
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Start animation loop when image is loaded
+        img.onload = () => {
+            requestAnimationFrame(loop);
+        };
+
+        // Fallback start just in case it's instantly cached or fails
+        requestAnimationFrame(loop);
+
+        // --- Video Export Logic ---
+        async function startRecording(durationSeconds, btnElement) {
+            // Disable all buttons
+            recordBtn.disabled = true;
+            testBtn.disabled = true;
+
+            const originalText = btnElement.innerText;
+
+            // Capture a 60fps stream from the canvas
+            const stream = canvas.captureStream(60);
+
+            // Try formats in order of best compatibility
+            let mimeType = '';
+            const preferredTypes = [
+                'video/mp4;codecs=h264',
+                'video/mp4;codecs=avc1',
+                'video/mp4',
+                'video/x-matroska;codecs=avc1',
+                'video/webm;codecs=h264',
+                'video/webm;codecs=vp9',
+                'video/webm;codecs=vp8',
+                'video/webm'
+            ];
+
+            for (const t of preferredTypes) {
+                if (MediaRecorder.isTypeSupported(t)) {
+                    mimeType = t;
+                    break;
+                }
+            }
+
+            // Provide a warning to Mac users on Chrome if they do a full render
+            const isWebm = mimeType && mimeType.includes('webm');
+            if (isWebm && durationSeconds > 30) {
+                alert("Note: Your browser only supports recording WebM video natively. This file might not open in Mac QuickTime, but you can view it in your browser or VLC. For native .mp4 recording on Mac, try using Safari.");
+            }
+
+            try {
+                const options = mimeType ? { mimeType } : {};
+                const recorder = new MediaRecorder(stream, options);
+                let chunks = [];
+                let elapsedSeconds = 0;
+
+                // Simple timer updater
+                const timerInterval = setInterval(() => {
+                    elapsedSeconds++;
+                    const remaining = durationSeconds - elapsedSeconds;
+                    btnElement.innerText = `Recording... (${remaining}s remaining)`;
+
+                    if (remaining <= 0) clearInterval(timerInterval);
+                }, 1000);
+
+                recorder.ondataavailable = e => {
+                    if (e.data && e.data.size > 0) {
+                        chunks.push(e.data);
+                    }
+                };
+
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: mimeType || 'video/mp4' }); // Provide fallback type
+                    const url = URL.createObjectURL(blob);
+
+                    let extension = 'mp4';
+                    if (mimeType.includes('webm')) {
+                        extension = 'webm';
+                    } else if (mimeType.includes('matroska')) {
+                        extension = 'mkv';
+                    }
+                    const filename = `dvd-bounce-${durationSeconds}s.${extension}`;
+
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                        // Re-enable UI
+                        recordBtn.disabled = false;
+                        testBtn.disabled = false;
+                        btnElement.innerText = originalText;
+                        chunks = [];
+                    }, 100);
+                };
+
+                // Start recording
+                recorder.start(100); // Record in 100ms chunks
+
+                // Stop immediately after requested duration
+                setTimeout(() => {
+                    recorder.stop();
+                }, durationSeconds * 1000);
+
+            } catch (err) {
+                console.error("MediaRecorder error:", err);
+                alert("Recording is not cleanly supported in this browser.");
+                recordBtn.disabled = false;
+                testBtn.disabled = false;
+                btnElement.innerText = originalText;
+            }
+        }
+
+        recordBtn.addEventListener('click', () => startRecording(120, recordBtn));
+        testBtn.addEventListener('click', () => startRecording(10, testBtn));
+    </script>
+</body>
+
+</html>

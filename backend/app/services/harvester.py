@@ -50,6 +50,7 @@ class OpenAlexHarvester:
     def _build_filter_string(
         self,
         from_date: date,
+        to_date: Optional[date] = None,
         category: Optional[Category] = None,
     ) -> str:
         """
@@ -57,17 +58,23 @@ class OpenAlexHarvester:
         
         Args:
             from_date: Start date for publication filter.
+            to_date: End date for publication filter.
             category: Optional category to filter by field IDs.
             
         Returns:
             Filter string for OpenAlex API.
         """
         filters = [
-            f"from_publication_date:{from_date}",
             "type:article|review",  # Only peer-reviewed articles and reviews
             "has_abstract:true",
             "primary_location.version:publishedVersion",  # Final published only
         ]
+        
+        if from_date:
+            filters.append(f"from_publication_date:{from_date}")
+            
+        if to_date:
+            filters.append(f"to_publication_date:{to_date}")
         
         if category is not None:
             # Use topics.field.id for field-level filtering
@@ -92,16 +99,24 @@ class OpenAlexHarvester:
     async def fetch_papers(
         self,
         from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
         category: Optional[Category] = None,
+        query: Optional[str] = None,
         per_page: int = DEFAULT_PER_PAGE,
+        sort: Optional[str] = None,
+        relaxed_filters: bool = False,
     ) -> list[dict]:
         """
         Fetch papers from OpenAlex API.
         
         Args:
             from_date: Start date for papers. Defaults to yesterday.
+            to_date: End date for papers. Defaults to None.
             category: Optional category to filter papers by topic.
             per_page: Number of results per request (max 200).
+            sort: Explicit sort order (e.g. "cited_by_count:desc").
+                  If None: uses cited_by_count:desc for non-search, relevance for search.
+            relaxed_filters: If True, drops publishedVersion filter (useful for older/foundational papers).
             
         Returns:
             List of raw paper dictionaries from OpenAlex.
@@ -109,16 +124,31 @@ class OpenAlexHarvester:
         Raises:
             Does not raise - returns empty list on error.
         """
-        if from_date is None:
+        if from_date is None and not query and category:
             from_date = date.today() - timedelta(days=self.DEFAULT_LOOKBACK_DAYS)
         
-        filter_string = self._build_filter_string(from_date, category)
+        filter_string = self._build_filter_string(from_date, to_date, category)
+
+        if relaxed_filters:
+            filter_string = ",".join(
+                f for f in filter_string.split(",")
+                if "primary_location.version" not in f
+            )
         
         params = {
             "filter": filter_string,
-            "sort": "cited_by_count:desc",
-            "per_page": min(per_page, 200),  # OpenAlex max is 200
+            "per_page": min(per_page, 200),
         }
+        
+        if sort:
+            params["sort"] = sort
+            if query:
+                params["search"] = query
+        elif query:
+            params["search"] = query
+            # Let OpenAlex rank by relevance_score when searching by keyword
+        else:
+            params["sort"] = "cited_by_count:desc"
         
         headers = self._build_request_headers()
         

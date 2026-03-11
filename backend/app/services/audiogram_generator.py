@@ -48,6 +48,7 @@ class AudiogramGenerator:
         brand_name: str = "THE EUREKA FEED",
         start_seconds: float = 0,
         duration_seconds: float = DEFAULT_CLIP_DURATION,
+        custom_text: str | None = None,
     ) -> str:
         """
         Generate an audiogram video slide.
@@ -60,14 +61,20 @@ class AudiogramGenerator:
             brand_name: Brand name shown at top
             start_seconds: Where to start the audio clip
             duration_seconds: Length of the clip
+            custom_text: If provided, generate fresh TTS audio from this text
+                         instead of clipping from the episode audio
 
         Returns:
             Public URL path to the generated video
         """
-        # 1. Download the audio clip
-        audio_path = await self._download_audio_clip(
-            audio_url, start_seconds, duration_seconds
-        )
+        # 1. Get audio — either fresh TTS or clip from episode
+        if custom_text:
+            audio_path = await self._generate_tts_audio(custom_text)
+            # Duration is determined by the TTS output length
+        else:
+            audio_path = await self._download_audio_clip(
+                audio_url, start_seconds, duration_seconds
+            )
 
         # 2. Generate ASS subtitle file for text
         ass_content = self._generate_ass(headline, category, brand_name)
@@ -207,6 +214,21 @@ class AudiogramGenerator:
             return clip_path
 
         return raw_path
+
+    async def _generate_tts_audio(self, text: str) -> str:
+        """Generate fresh TTS audio from text using tts-1-hd."""
+        from app.services.tts import TTSGenerator
+
+        logger.info(f"Generating HD TTS audio for audiogram: {len(text)} chars")
+        tts = TTSGenerator()
+        audio_bytes = await tts.generate_audio(text)
+
+        audio_fd, audio_path = tempfile.mkstemp(suffix='.mp3')
+        with os.fdopen(audio_fd, 'wb') as f:
+            f.write(audio_bytes)
+
+        logger.info(f"HD TTS audio saved: {audio_path} ({len(audio_bytes)} bytes)")
+        return audio_path
 
     def _generate_ass(
         self,
