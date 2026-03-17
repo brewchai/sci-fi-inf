@@ -16,6 +16,7 @@ import io
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import httpx
 from loguru import logger
@@ -39,6 +40,10 @@ GOLD_ABGR = "0053A8D4"   # #d4a853 in &HAABBGGRR
 # Defaults
 DEFAULT_REEL_DURATION = 30
 CAPTION_MARGIN_BOTTOM = HEIGHT - int(HEIGHT * 0.70)
+CAPTION_TARGET_WORDS = 5
+CAPTION_MAX_WORDS = 7
+CAPTION_SOFT_MAX_CHARS = 30
+CAPTION_PAUSE_BREAK_SECONDS = 0.35
 
 
 class ReelGenerator:
@@ -64,12 +69,13 @@ class ReelGenerator:
         overlay_video_url: str | None = None,
         background_clip_paths: list[str] | None = None,
         anchor_timeline: list | None = None,
+        scene_timeline: list | None = None,
         word_timestamps: list[dict] | None = None,
         voice: str = "nova",
         speed: float = 1.0,
-        elevenlabs_stability: float = 0.3,
-        elevenlabs_similarity_boost: float = 0.75,
-        elevenlabs_style: float = 0.4,
+        elevenlabs_stability: float = 0.65,
+        elevenlabs_similarity_boost: float = 0.85,
+        elevenlabs_style: float = 0.1,
         tts_provider: str = "openai",
         include_waveform: bool = True,
     ) -> str:
@@ -82,10 +88,53 @@ class ReelGenerator:
         temp_files = []
 
         try:
+            # Prevent accidental clipping: when a scene/word timeline extends past requested
+            # duration, extend clip length so tail scenes are still renderable.
+            effective_duration_seconds = duration_seconds
+            if scene_timeline:
+                scene_ends: list[float] = []
+                for raw_scene in scene_timeline:
+                    try:
+                        if isinstance(raw_scene, dict):
+                            start_value = float(raw_scene.get("start_time_seconds", 0))
+                            end_value = raw_scene.get("end_time_seconds")
+                        else:
+                            start_value = float(getattr(raw_scene, "start_time_seconds", 0))
+                            end_value = getattr(raw_scene, "end_time_seconds", None)
+                        if end_value is None:
+                            scene_ends.append(start_value + 1.0)
+                        else:
+                            scene_ends.append(max(float(end_value), start_value + 0.2))
+                    except Exception:
+                        continue
+                if scene_ends:
+                    max_scene_end = max(scene_ends)
+                    effective_duration_seconds = max(
+                        effective_duration_seconds,
+                        max_scene_end - start_seconds + 0.5
+                    )
+
+            if word_timestamps:
+                try:
+                    max_word_end = max(float(w.get("end", 0)) for w in word_timestamps if isinstance(w, dict))
+                    effective_duration_seconds = max(
+                        effective_duration_seconds,
+                        max_word_end - start_seconds + 0.5
+                    )
+                except Exception:
+                    pass
+
+            if effective_duration_seconds > duration_seconds + 0.01:
+                logger.warning(
+                    "Extending clip duration to preserve full timeline: "
+                    f"requested={duration_seconds:.2f}s effective={effective_duration_seconds:.2f}s "
+                    f"start_seconds={start_seconds:.2f}"
+                )
+
             # 1. Get main audio
             if audio_url:
                 audio_path = await self._download_audio_clip(
-                    audio_url, start_seconds, duration_seconds
+                    audio_url, start_seconds, effective_duration_seconds
                 )
             elif custom_text:
                 audio_path = await self._generate_tts_audio(
@@ -186,6 +235,7 @@ class ReelGenerator:
                 temp_files.append(overlay_video_path)
 
             anchor_timeline_events = anchor_timeline or []
+            scene_timeline_events = scene_timeline or []
             if anchor_timeline_events:
                 effect_debug = []
                 for idx, ev in enumerate(anchor_timeline_events):
@@ -197,13 +247,21 @@ class ReelGenerator:
                 logger.info(f"Anchor timeline received ({len(anchor_timeline_events)} events): {' | '.join(effect_debug)}")
             
             ai_image_paths: list[str] = []
-            if anchor_timeline_events:
+            scene_asset_specs: list[dict] = []
+            if scene_timeline_events:
+                scene_asset_specs = await self._download_scene_assets(scene_timeline_events)
+                logger.info(f"Scene timeline mode active: resolved {len(scene_asset_specs)} scene assets")
+            elif anchor_timeline_events:
                 ai_image_paths = await self._download_ai_images([ev.image_url for ev in anchor_timeline_events])
                 logger.info(f"AI image timeline mode active: downloaded {len(ai_image_paths)} images")
                 
             for p in ai_image_paths:
                 if "static/carousel_images" not in p:
                     temp_files.append(p)
+            for spec in scene_asset_specs:
+                path = spec.get("path")
+                if path and spec.get("is_temp_file"):
+                    temp_files.append(path)
 
             # 6. Build FFmpeg command
             if episode_id:
@@ -224,7 +282,12 @@ class ReelGenerator:
             waveform_y = (HEIGHT // 2) - (waveform_h // 2) + 50
             margin_x = 60
 
-            if ai_image_paths and len(ai_image_paths) > 0:
+            if scene_asset_specs and len(scene_asset_specs) > 0:
+                filter_complex, extra_inputs = self._build_scene_timeline_filter(
+                    scene_asset_specs, total_duration, ass_escaped,
+                    waveform_h, waveform_y, margin_x, include_waveform
+                )
+            elif ai_image_paths and len(ai_image_paths) > 0:
                 filter_complex, extra_inputs = self._build_ai_images_filter(
                     ai_image_paths, total_duration, ass_escaped,
                     waveform_h, waveform_y, margin_x, anchor_timeline_events, include_waveform
@@ -274,7 +337,11 @@ class ReelGenerator:
                 "-i", str(audio_path),
             ]
             
-            if ai_image_paths and len(ai_image_paths) > 0:
+            if scene_asset_specs and len(scene_asset_specs) > 0:
+                for spec in scene_asset_specs:
+                    if spec.get("path"):
+                        cmd.extend(["-i", spec["path"]])
+            elif ai_image_paths and len(ai_image_paths) > 0:
                 for cp in ai_image_paths:
                     cmd.extend(["-i", cp])
             elif multi_clip_paths and len(multi_clip_paths) >= 2:
@@ -300,7 +367,6 @@ class ReelGenerator:
                 "-ar", "48000",
                 "-r", str(FPS),
                 "-pix_fmt", "yuv420p",
-                "-shortest",
                 "-movflags", "+faststart",
                 output_path,
             ])
@@ -637,6 +703,145 @@ class ReelGenerator:
         
         return ";\n".join(parts), image_paths
 
+    def _build_scene_timeline_filter(
+        self,
+        scene_asset_specs: list[dict],
+        total_duration: float,
+        ass_escaped: str,
+        waveform_h: int,
+        waveform_y: int,
+        margin_x: int,
+        include_waveform: bool = True,
+    ) -> tuple[str, list[str]]:
+        """Build FFmpeg filter for a mixed scene timeline of images, videos, and blanks."""
+        parts: list[str] = []
+        input_idx = 1
+        if scene_asset_specs:
+            scene_asset_specs = sorted(scene_asset_specs, key=lambda s: float(s.get("start_time_seconds", 0.0)))
+        base_start = float(scene_asset_specs[0].get("start_time_seconds", 0.0)) if scene_asset_specs else 0.0
+        xfade_dur = 0.2
+
+        # Normalize scene starts into a safe relative timeline.
+        relative_starts: list[float] = []
+        for spec in scene_asset_specs:
+            rel = max(0.0, float(spec.get("start_time_seconds", 0.0)) - base_start)
+            relative_starts.append(rel)
+
+        if relative_starts:
+            target_span = max(total_duration - xfade_dur - 0.05, 0.5)
+            max_rel = relative_starts[-1]
+            if max_rel > target_span and max_rel > 0:
+                scale = target_span / max_rel
+                relative_starts = [r * scale for r in relative_starts]
+                logger.warning(
+                    f"Scene timeline starts exceed audio span; compressing timeline by scale={scale:.4f} "
+                    f"(max_rel={max_rel:.2f}, target_span={target_span:.2f})"
+                )
+
+            # Ensure strict monotonic progression to keep xfade offsets valid.
+            min_gap = max(0.03, min(0.08, target_span / max(len(relative_starts) * 3, 1)))
+            for idx in range(1, len(relative_starts)):
+                if relative_starts[idx] <= relative_starts[idx - 1] + min_gap:
+                    relative_starts[idx] = relative_starts[idx - 1] + min_gap
+            if relative_starts[-1] > target_span and relative_starts[-1] > 0:
+                clamp_scale = target_span / relative_starts[-1]
+                relative_starts = [r * clamp_scale for r in relative_starts]
+
+        for idx, spec in enumerate(scene_asset_specs):
+            current_rel_start = relative_starts[idx] if idx < len(relative_starts) else 0.0
+            next_rel_start = relative_starts[idx + 1] if idx + 1 < len(relative_starts) else total_duration
+            duration = max(spec.get("duration", 0.5), max(next_rel_start - current_rel_start, 0.4))
+            is_hook = False
+            if idx > 0 and idx < len(scene_asset_specs) - 1:
+                duration += xfade_dur
+            elif idx == len(scene_asset_specs) - 1 and len(scene_asset_specs) > 1:
+                duration += xfade_dur
+            if idx == len(scene_asset_specs) - 1:
+                # Ensure visuals cover the full narration span; otherwise `-shortest`
+                # cuts the rendered reel early even when audio is longer.
+                remaining = max(total_duration - current_rel_start, 0.5)
+                duration = max(duration, remaining)
+
+            effect_name = spec.get("effect_transition_name")
+            label = f"c{idx}"
+            if spec.get("asset_type") in {"stock_video", "user_video", "local_video"} and spec.get("path"):
+                parts.append(
+                    f"[{input_idx}:v]setpts=PTS-STARTPTS,"
+                    f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},"
+                    f"fps={FPS},tpad=stop_mode=clone:stop_duration={duration + 1.0:.2f},"
+                    f"trim=duration={duration:.2f},setpts=PTS-STARTPTS,"
+                    f"eq=brightness=-0.08:saturation=1.05,format=yuv420p[{label}]"
+                )
+                input_idx += 1
+            elif spec.get("asset_type") in {"stock_image", "ai_image", "user_image", "local_image"} and spec.get("path"):
+                frames_to_zoom = int((duration + 2.0) * FPS)
+                motion = self._map_transition_to_body_motion(effect_name)
+                motion = motion or "z='min(max(zoom,1.2)+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1"
+                eq_filter = "eq=brightness=-0.08:saturation=1.08"
+                parts.append(
+                    f"[{input_idx}:v]loop=-1:size=1:start=0,setpts=N/({FPS}*TB),"
+                    f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},"
+                    f"zoompan={motion}:s={WIDTH}x{HEIGHT}:fps={FPS}:d={frames_to_zoom},"
+                    f"trim=duration={duration:.2f},setpts=PTS-STARTPTS,{eq_filter},format=yuv420p[{label}]"
+                )
+                input_idx += 1
+            else:
+                parts.append(
+                    f"color=c=#{BG_COLOR}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.2f}[{label}]"
+                )
+
+        if not scene_asset_specs:
+            parts.append(f"color=c=#{BG_COLOR}:s={WIDTH}x{HEIGHT}:r={FPS}:d={total_duration}[bg]")
+        elif len(scene_asset_specs) == 1:
+            logger.info(
+                "Scene timeline effect: "
+                f"scene_id={scene_asset_specs[0].get('scene_id')} "
+                f"start={scene_asset_specs[0].get('start_time_seconds')} "
+                f"duration={scene_asset_specs[0].get('duration')} "
+                f"asset_source={scene_asset_specs[0].get('asset_type')} "
+                f"effect={scene_asset_specs[0].get('effect_transition_name') or 'None'} "
+                "xfade=initial"
+            )
+            parts.append("[c0]null[bg]")
+        else:
+            logger.info(
+                "Scene timeline effect: "
+                f"scene_id={scene_asset_specs[0].get('scene_id')} "
+                f"start={scene_asset_specs[0].get('start_time_seconds')} "
+                f"duration={scene_asset_specs[0].get('duration')} "
+                f"asset_source={scene_asset_specs[0].get('asset_type')} "
+                f"effect={scene_asset_specs[0].get('effect_transition_name') or 'None'} "
+                "xfade=initial"
+            )
+            prev = "c0"
+            prev_offset = 0.0
+            max_offset = max(total_duration - xfade_dur - 0.01, 0.01)
+            for idx in range(1, len(scene_asset_specs)):
+                spec = scene_asset_specs[idx]
+                is_hook = False
+                relative_start = relative_starts[idx] if idx < len(relative_starts) else 0.0
+                offset = max(0.01, min(relative_start - xfade_dur, max_offset))
+                if offset <= prev_offset:
+                    offset = min(max_offset, prev_offset + 0.01)
+                transition = self._map_transition_to_xfade(spec.get("effect_transition_name"), is_hook)
+                logger.info(
+                    "Scene timeline effect: "
+                    f"scene_id={spec.get('scene_id')} "
+                    f"start={spec.get('start_time_seconds')} "
+                    f"relative_start={relative_start:.2f} "
+                    f"duration={spec.get('duration')} "
+                    f"asset_source={spec.get('asset_type')} "
+                    f"effect={spec.get('effect_transition_name') or 'None'} "
+                    f"xfade={transition}"
+                )
+                out_label = "bg" if idx == len(scene_asset_specs) - 1 else f"x{idx}"
+                parts.append(f"[{prev}][c{idx}]xfade=transition={transition}:duration={xfade_dur}:offset={offset:.2f}[{out_label}]")
+                prev = out_label
+                prev_offset = offset
+
+        parts.append(self._build_overlay_chain("bg", ass_escaped, waveform_h, waveform_y, margin_x, include_waveform, with_semicolons=False))
+        return ";\n".join(parts), [spec["path"] for spec in scene_asset_specs if spec.get("path")]
+
     def _build_overlay_chain(
         self,
         bg_label: str,
@@ -867,37 +1072,124 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 {caption_dialogues}"""
 
     def _build_caption_dialogues(self, word_timestamps: list[dict], duration: float) -> str:
-        """Build caption dialogues grouped into ~3 words per screen, with a subtle pop."""
+        """Build caption dialogues using phrase-aware chunking and calmer caption styling."""
         if not word_timestamps:
             return ""
 
         lines = []
-        chunk_size = 3
-        
-        for i in range(0, len(word_timestamps), chunk_size):
-            chunk = word_timestamps[i:i+chunk_size]
+        caption_chunks = self._segment_caption_chunks(word_timestamps)
+
+        for idx, chunk in enumerate(caption_chunks):
             start_time = chunk[0]["start"]
-            
-            # The end time is the start of the next word if available, else the end of the last word in chunk + padding
-            if i + chunk_size < len(word_timestamps):
-                end_time = min(word_timestamps[i+chunk_size]["start"], duration)
+            if idx + 1 < len(caption_chunks):
+                next_chunk_start = caption_chunks[idx + 1][0]["start"]
+                end_time = min(max(chunk[-1]["end"], next_chunk_start - 0.02), duration)
             else:
                 end_time = min(chunk[-1]["end"] + 0.5, duration)
-                
+
+            if end_time <= start_time:
+                end_time = min(start_time + 0.2, duration)
+
             start_ts = self._secs_to_ts(start_time)
             end_ts = self._secs_to_ts(end_time)
-
-            word_text = " ".join([w["word"].strip() for w in chunk if w["word"].strip()])
+            word_text = self._wrap_caption_text(chunk)
             if not word_text:
                 continue
 
-            # Apply a quick bouncing scale effect and tight fade for each chunk
+            debug_text = word_text.replace("\\N", " / ")
+            logger.info(
+                "Caption chunk: "
+                f"text='{debug_text}' start={start_time:.2f} end={end_time:.2f} "
+                f"words={len(chunk)} chars={len(debug_text)}"
+            )
+
             lines.append(
                 f"Dialogue: 1,{start_ts},{end_ts},Caption,,0,0,0,,"
-                f"{{\\fad(50,50)\\t(0,100,\\fscx110\\fscy110)\\t(100,200,\\fscx100\\fscy100)}}{word_text}"
+                f"{{\\fad(40,60)}}{word_text}"
             )
 
         return "\n".join(lines) + "\n"
+
+    def _segment_caption_chunks(self, word_timestamps: list[dict]) -> list[list[dict]]:
+        """Group timestamps into subtitle phrases using punctuation, pauses, and size limits."""
+        chunks: list[list[dict]] = []
+        current_chunk: list[dict] = []
+        sentence_breaks = (".", "?", "!")
+        phrase_breaks = (",", ";", ":")
+
+        for idx, word_data in enumerate(word_timestamps):
+            word = word_data["word"].strip()
+            if not word:
+                continue
+
+            current_chunk.append(word_data)
+            next_word = word_timestamps[idx + 1] if idx + 1 < len(word_timestamps) else None
+            pause_gap = 0.0
+            if next_word:
+                pause_gap = max(0.0, float(next_word["start"]) - float(word_data["end"]))
+
+            visible_text = " ".join(item["word"].strip() for item in current_chunk if item["word"].strip())
+            word_count = len(current_chunk)
+            ends_sentence = word.endswith(sentence_breaks)
+            ends_phrase = word.endswith(phrase_breaks)
+            over_soft_chars = len(visible_text) >= CAPTION_SOFT_MAX_CHARS
+            target_reached = word_count >= CAPTION_TARGET_WORDS
+            hard_limit = word_count >= CAPTION_MAX_WORDS
+            long_pause = pause_gap >= CAPTION_PAUSE_BREAK_SECONDS
+
+            should_break = False
+            if hard_limit:
+                should_break = True
+            elif ends_sentence:
+                should_break = True
+            elif ends_phrase and word_count >= 3:
+                should_break = True
+            elif long_pause and word_count >= 2:
+                should_break = True
+            elif over_soft_chars and target_reached:
+                should_break = True
+
+            if should_break:
+                chunks.append(current_chunk)
+                current_chunk = []
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
+
+    def _wrap_caption_text(self, chunk: list[dict]) -> str:
+        """Wrap a caption chunk to at most two balanced lines."""
+        words = [item["word"].strip() for item in chunk if item["word"].strip()]
+        if not words:
+            return ""
+        text = " ".join(words)
+        if len(text) <= CAPTION_SOFT_MAX_CHARS:
+            return text
+
+        split_idx = -1
+        total_chars = len(text)
+        left_chars = 0
+        best_delta = None
+
+        for idx in range(1, len(words)):
+            left_chars += len(words[idx - 1]) + (1 if idx > 1 else 0)
+            right_chars = total_chars - left_chars - 1
+            if len(words[idx:]) == 1:
+                continue
+            delta = abs(left_chars - right_chars)
+            if best_delta is None or delta < best_delta:
+                best_delta = delta
+                split_idx = idx
+
+        if split_idx == -1:
+            return text
+
+        first_line = " ".join(words[:split_idx]).strip()
+        second_line = " ".join(words[split_idx:]).strip()
+        if not first_line or not second_line:
+            return text
+        return f"{first_line}\\N{second_line}"
 
     @staticmethod
     def _secs_to_ts(seconds: float) -> str:
@@ -951,13 +1243,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 resp = await client.get(audio_url)
                 resp.raise_for_status()
 
-            raw_fd, raw_path_temp = tempfile.mkstemp(suffix='.mp3')
+            # Keep the original extension unknown-safe; we always transcode later.
+            raw_fd, raw_path_temp = tempfile.mkstemp(suffix='.bin')
             with os.fdopen(raw_fd, 'wb') as f:
                 f.write(resp.content)
             raw_path = raw_path_temp
             is_local = False
 
-        # Always extract the requested clip (start + duration)
+        # Always extract and transcode into a valid MP3 clip, regardless of source codec/container.
         clip_fd, clip_path = tempfile.mkstemp(suffix='.mp3')
         os.close(clip_fd)
 
@@ -966,7 +1259,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "-ss", str(start_seconds),
             "-i", raw_path,
             "-t", str(duration_seconds),
-            "-c", "copy",
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-b:a", "320k",
+            "-ar", "48000",
+            "-ac", "2",
             clip_path,
         ]
         process = await asyncio.create_subprocess_exec(
@@ -974,7 +1271,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await process.communicate()
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            error_msg = stderr.decode()[-1200:] if stderr else "Unknown ffmpeg error"
+            if not is_local and os.path.exists(raw_path):
+                os.unlink(raw_path)
+            if os.path.exists(clip_path):
+                os.unlink(clip_path)
+            raise RuntimeError(f"Failed to prepare audio clip from {audio_url}: {error_msg}")
         
         if not is_local:
             os.unlink(raw_path)
@@ -987,9 +1291,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         voice: str = "nova",
         speed: float = 1.0,
         provider: str = "openai",
-        elevenlabs_stability: float = 0.3,
-        elevenlabs_similarity_boost: float = 0.75,
-        elevenlabs_style: float = 0.4,
+        elevenlabs_stability: float = 0.65,
+        elevenlabs_similarity_boost: float = 0.85,
+        elevenlabs_style: float = 0.1,
     ) -> str:
         """Generate TTS audio using the specified provider."""
         logger.info(
@@ -1110,3 +1414,63 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             paths.append(r)
             
         return paths
+
+    async def _download_scene_assets(self, scene_timeline: list) -> list[dict]:
+        """Resolve selected scene assets to local files for mixed-asset rendering."""
+        specs: list[dict] = []
+        normalized_scene_timeline = sorted(
+            scene_timeline,
+            key=lambda raw: float(raw.get("start_time_seconds", 0) if isinstance(raw, dict) else raw.start_time_seconds),
+        )
+        n = len(normalized_scene_timeline)
+
+        async def fetch_to_path(url: str, idx: int, kind: str) -> tuple[str, bool]:
+            if url.startswith("/static/"):
+                return os.path.join(os.getcwd(), url.lstrip("/")), False
+            parsed = urlparse(url)
+            local_path = parsed.path if parsed.path else url
+            if local_path.startswith("/local-library/") and settings.LOCAL_MEDIA_LIBRARY_ROOT:
+                relative = unquote(local_path[len("/local-library/"):]).lstrip("/")
+                resolved_root = Path(settings.LOCAL_MEDIA_LIBRARY_ROOT).expanduser().resolve()
+                resolved_path = (resolved_root / relative).resolve()
+                try:
+                    resolved_path.relative_to(resolved_root)
+                except Exception as exc:
+                    raise RuntimeError(f"Rejected local-library path outside root: {url}") from exc
+                if not resolved_path.exists():
+                    raise RuntimeError(f"Local-library asset not found: {resolved_path}")
+                return str(resolved_path), False
+            suffix = ".mp4" if kind in {"stock_video", "user_video", "local_video"} or ".mp4" in url.lower() or ".mov" in url.lower() else ".png"
+            async with httpx.AsyncClient(timeout=90, follow_redirects=True) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+            fd, path = tempfile.mkstemp(suffix=f"_scene_{idx}{suffix}")
+            with os.fdopen(fd, "wb") as f:
+                f.write(resp.content)
+            return path, True
+
+        for idx, raw_scene in enumerate(normalized_scene_timeline):
+            scene = raw_scene if isinstance(raw_scene, dict) else raw_scene.model_dump()
+            start_time = float(scene.get("start_time_seconds", 0))
+            next_start = float(normalized_scene_timeline[idx + 1].get("start_time_seconds", 0) if isinstance(normalized_scene_timeline[idx + 1], dict) else normalized_scene_timeline[idx + 1].start_time_seconds) if idx < n - 1 else None
+            end_time = float(scene.get("end_time_seconds") or next_start or start_time + 2.0)
+            duration = max((next_start or end_time) - start_time, 0.5)
+            selected = scene.get("selected_asset") or {}
+            asset_source = scene.get("asset_source") or selected.get("asset_source") or ("ai_image" if scene.get("ai_image_url") else "none")
+            asset_url = selected.get("asset_url") or scene.get("ai_image_url")
+            path = None
+            is_temp_file = False
+            if asset_url and asset_source != "none":
+                path, is_temp_file = await fetch_to_path(asset_url, idx, asset_source)
+            specs.append({
+                "scene_id": scene.get("scene_id", f"scene-{idx + 1}"),
+                "anchor_word": scene.get("anchor_word", ""),
+                "start_time_seconds": start_time,
+                "duration": duration,
+                "effect_transition_name": scene.get("effect_transition_name"),
+                "asset_type": asset_source,
+                "path": path,
+                "is_temp_file": is_temp_file,
+                "is_hook": False,
+            })
+        return specs

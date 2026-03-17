@@ -380,6 +380,26 @@ class TimelineEvent(BaseModel):
     start_time_seconds: float = Field(..., description="The exact float timestamp this image should appear based on the spoken Anchor Word")
     effect_transition_name: Optional[str] = Field(default=None, description="Named transition/effect selected from AI Director guidance")
 
+
+class SelectedSceneAsset(BaseModel):
+    asset_source: str = Field(..., description="local_image | local_video | stock_image | stock_video | ai_image | user_image | user_video | none")
+    asset_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    candidate_id: Optional[str] = None
+
+
+class SceneTimelineEvent(BaseModel):
+    scene_id: str
+    anchor_word: str
+    start_time_seconds: float
+    end_time_seconds: float
+    transcript_excerpt: Optional[str] = None
+    effect_transition_name: Optional[str] = None
+    selected_asset: Optional[SelectedSceneAsset] = None
+    ai_prompt: Optional[str] = None
+    ai_image_url: Optional[str] = None
+    asset_source: str = Field(default="none", description="local_image | local_video | stock_image | stock_video | ai_image | user_image | user_video | none")
+
 class GenerateReelRequest(BaseModel):
     """Request to generate a vertical waveform reel."""
     headline: str = Field(..., description="Hook headline for the reel")
@@ -392,13 +412,14 @@ class GenerateReelRequest(BaseModel):
     overlay_video_url: Optional[str] = Field(default=None, description="URL to an optional overlay video to place on top (via screen/colorkey)")
     voice: str = Field(default="nova", description="TTS voice: nova, onyx, or fable (OpenAI) / brian, matilda, charlie, dave, lily, adam (ElevenLabs)")
     speed: float = Field(default=1.0, ge=0.5, le=2.0, description="TTS speed (0.5–2.0)")
-    elevenlabs_stability: float = Field(default=0.3, ge=0.0, le=1.0, description="ElevenLabs stability setting")
-    elevenlabs_similarity_boost: float = Field(default=0.75, ge=0.0, le=1.0, description="ElevenLabs similarity boost setting")
-    elevenlabs_style: float = Field(default=0.4, ge=0.0, le=1.0, description="ElevenLabs style exaggeration setting")
+    elevenlabs_stability: float = Field(default=0.65, ge=0.0, le=1.0, description="ElevenLabs stability setting")
+    elevenlabs_similarity_boost: float = Field(default=0.85, ge=0.0, le=1.0, description="ElevenLabs similarity boost setting")
+    elevenlabs_style: float = Field(default=0.1, ge=0.0, le=1.0, description="ElevenLabs style exaggeration setting")
     tts_provider: str = Field(default="openai", description="TTS provider: openai or elevenlabs", pattern="^(openai|elevenlabs)$")
     auto_visuals: bool = Field(default=False, description="Auto-fetch relevant stock footage from Pexels as background")
     background_clip_urls: Optional[List[str]] = Field(default=None, description="User-approved Pexels clip URLs in order (from Fetch visuals flow)")
     anchor_timeline: Optional[List[TimelineEvent]] = Field(default=None, description="Exact spoken-word timeline for explicit AI image pacing")
+    scene_timeline: Optional[List[SceneTimelineEvent]] = Field(default=None, description="Resolved mixed-asset scene timeline for the custom reel flow")
     word_timestamps: Optional[List[dict]] = Field(default=None, description="Pre-computed Whisper word timestamps to skip regeneration")
     include_waveform: bool = Field(default=True, description="Whether to render the animated waveform overlay")
 
@@ -478,6 +499,7 @@ async def generate_reel(
             overlay_video_url=request.overlay_video_url,
             background_clip_paths=clip_paths,
             anchor_timeline=request.anchor_timeline,
+            scene_timeline=request.scene_timeline,
             voice=request.voice,
             speed=request.speed,
             elevenlabs_stability=request.elevenlabs_stability,
