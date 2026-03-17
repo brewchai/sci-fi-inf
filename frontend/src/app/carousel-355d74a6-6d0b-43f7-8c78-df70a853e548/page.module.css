@@ -336,6 +336,16 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.transitionMarker:hover .transitionMarkerLabel,
+.transitionMarker:focus-visible .transitionMarkerLabel {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 @media (max-width: 900px) {

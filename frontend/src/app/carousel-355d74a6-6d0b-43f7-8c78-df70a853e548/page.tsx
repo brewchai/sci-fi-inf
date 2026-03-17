@@ -278,6 +278,107 @@ export default function CarouselGenerator() {
         return Math.min(Math.max(proposedTime, previousBound), nextBound);
     };
 
+    const findNearestWordTimestamp = (
+        targetTime: number,
+        minTime: number = 0,
+        maxTime: number = timelineDuration,
+    ): WordTimestamp | null => {
+        if (wordTimestamps.length === 0) return null;
+        const candidates = wordTimestamps.filter(w => w.start >= minTime && w.start <= maxTime);
+        const pool = candidates.length > 0 ? candidates : wordTimestamps;
+        return pool.reduce((best, current) => {
+            return Math.abs(current.start - targetTime) < Math.abs(best.start - targetTime) ? current : best;
+        }, pool[0]);
+    };
+
+    const buildSceneExcerpt = (startTime: number, endTime: number, fallback: string) => {
+        if (wordTimestamps.length === 0) return fallback;
+        const words = wordTimestamps
+            .filter(w => w.start >= Math.max(0, startTime - 0.05) && w.start < Math.max(startTime + 0.05, endTime - 0.05))
+            .map(w => w.word.trim())
+            .filter(Boolean);
+        return words.join(' ') || fallback;
+    };
+
+    const buildSceneCaptionSuggestion = (
+        transcriptExcerpt: string,
+        anchorPhrase: string = '',
+        focusWord: string = '',
+    ) => {
+        const source = (anchorPhrase || transcriptExcerpt || focusWord || '').trim();
+        if (!source) return '';
+
+        const tokens = source
+            .replace(/\n/g, ' ')
+            .split(/\s+/)
+            .map(token => token.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, ''))
+            .filter(Boolean);
+        if (tokens.length === 0) return '';
+
+        const leadingFillers = new Set([
+            'i', 'we', 'you', 'they', 'he', 'she', 'it',
+            'was', 'were', 'am', 'is', 'are', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'did', 'does',
+            'to', 'that', 'just', 'really', 'kind', 'sort',
+        ]);
+        while (tokens.length > 2 && leadingFillers.has(tokens[0].toLowerCase())) {
+            tokens.shift();
+        }
+
+        const lowered = tokens.map(token => token.toLowerCase());
+        const toIdx = lowered.indexOf('to');
+        if (toIdx >= 0) {
+            const tail = tokens.slice(toIdx + 1);
+            if (tail.length >= 1 && tail.length <= 4) return tail.join(' ');
+        }
+
+        const forIdx = lowered.indexOf('for');
+        if (forIdx >= 0) {
+            const tail = tokens.slice(Math.max(0, forIdx - 1));
+            if (tail.length >= 2 && tail.length <= 4) return tail.join(' ');
+        }
+
+        if (tokens.length <= 4) return tokens.join(' ');
+        return tokens.slice(-3).join(' ');
+    };
+
+    const syncSceneMetadataToTime = (
+        scene: SceneTimelineItem,
+        startTime: number,
+        endTime: number,
+        bounds?: { minTime?: number; maxTime?: number },
+    ): SceneTimelineItem => {
+        const nearestWord = findNearestWordTimestamp(
+            startTime,
+            bounds?.minTime ?? 0,
+            bounds?.maxTime ?? timelineDuration,
+        );
+        const nextAnchorWord = nearestWord
+            ? normaliseTimelineWord(nearestWord.word) || scene.anchor_word
+            : scene.anchor_word;
+        const nextExcerpt = buildSceneExcerpt(
+            startTime,
+            endTime,
+            scene.anchor_phrase || scene.transcript_excerpt || nextAnchorWord,
+        );
+        const nextSuggestedCaption = buildSceneCaptionSuggestion(
+            nextExcerpt,
+            scene.anchor_phrase || nextExcerpt,
+            nearestWord ? normaliseTimelineWord(nearestWord.word) || scene.visual_focus_word || nextAnchorWord : scene.visual_focus_word || nextAnchorWord,
+        );
+        return {
+            ...scene,
+            start_time_seconds: startTime,
+            end_time_seconds: endTime,
+            anchor_word: nextAnchorWord,
+            visual_focus_word: nearestWord ? normaliseTimelineWord(nearestWord.word) || scene.visual_focus_word || nextAnchorWord : scene.visual_focus_word,
+            anchor_phrase: nextExcerpt,
+            transcript_excerpt: nextExcerpt,
+            caption_text: scene.caption_is_custom ? scene.caption_text : nextSuggestedCaption,
+            caption_is_custom: scene.caption_is_custom ?? false,
+        };
+    };
+
     const syncAnchorWordAtIndex = (idx: number, snappedWord: WordTimestamp | null, snappedTime: number) => {
         setAnchorWords(prev => {
             if (idx >= prev.length) return prev;
@@ -294,42 +395,45 @@ export default function CarouselGenerator() {
 
     const updateTransitionFromTime = (idx: number, rawTime: number) => {
         if (isCustomTab && sceneTimeline.length > 0) {
-            let snappedWordForSync: WordTimestamp | null = null;
-            let snappedTimeForSync = rawTime;
+            let updatedScenesForSync: SceneTimelineItem[] | null = null;
             setSceneTimeline(prev => {
                 if (idx < 0 || idx >= prev.length) return prev;
                 const next = [...prev];
                 const clampedTime = clampTransitionTime(next, idx, rawTime);
-                let snappedTime = clampedTime;
-                let snappedWord: WordTimestamp | null = null;
-
-                if (wordTimestamps.length > 0) {
-                    const previousBound = idx > 0 ? next[idx - 1].start_time_seconds + 0.05 : 0;
-                    const nextBound = idx < next.length - 1 ? next[idx + 1].start_time_seconds - 0.05 : timelineDuration;
-                    const candidates = wordTimestamps.filter(w => w.start >= previousBound && w.start <= nextBound);
-                    const pool = candidates.length > 0 ? candidates : wordTimestamps;
-                    snappedWord = pool.reduce((best, current) => {
-                        return Math.abs(current.start - clampedTime) < Math.abs(best.start - clampedTime) ? current : best;
-                    }, pool[0]);
-                    snappedTime = clampTransitionTime(next, idx, snappedWord.start);
-                }
-
+                const previousBound = idx > 0 ? next[idx - 1].start_time_seconds + 0.05 : 0;
+                const nextBound = idx < next.length - 1 ? next[idx + 1].start_time_seconds - 0.05 : timelineDuration;
                 next[idx] = {
                     ...next[idx],
-                    start_time_seconds: snappedTime,
-                    anchor_word: snappedWord ? normaliseTimelineWord(snappedWord.word) || next[idx].anchor_word : next[idx].anchor_word,
+                    start_time_seconds: clampedTime,
                 };
                 if (idx > 0) {
-                    next[idx - 1] = { ...next[idx - 1], end_time_seconds: snappedTime };
+                    next[idx - 1] = syncSceneMetadataToTime(
+                        next[idx - 1],
+                        next[idx - 1].start_time_seconds,
+                        clampedTime,
+                    );
                 }
                 if (idx < next.length - 1) {
-                    next[idx] = { ...next[idx], end_time_seconds: next[idx + 1].start_time_seconds };
+                    next[idx] = syncSceneMetadataToTime(
+                        next[idx],
+                        clampedTime,
+                        next[idx + 1].start_time_seconds,
+                        { minTime: previousBound, maxTime: nextBound },
+                    );
+                } else {
+                    next[idx] = syncSceneMetadataToTime(
+                        next[idx],
+                        clampedTime,
+                        Math.max(next[idx].end_time_seconds, clampedTime + 0.5),
+                        { minTime: previousBound, maxTime: nextBound },
+                    );
                 }
-                snappedWordForSync = snappedWord;
-                snappedTimeForSync = snappedTime;
+                updatedScenesForSync = next;
                 return next;
             });
-            syncAnchorWordAtIndex(idx, snappedWordForSync, snappedTimeForSync);
+            if (updatedScenesForSync) {
+                syncAnchorWordsFromScenes(updatedScenesForSync);
+            }
             return;
         }
 
@@ -418,6 +522,18 @@ export default function CarouselGenerator() {
         })));
     };
 
+    const normalizeSceneTimelineItem = (scene: SceneTimelineItem): SceneTimelineItem => ({
+        ...scene,
+        caption_text: scene.caption_text ?? buildSceneCaptionSuggestion(
+            scene.transcript_excerpt || scene.anchor_phrase || scene.anchor_word,
+            scene.anchor_phrase || scene.transcript_excerpt || scene.anchor_word,
+            scene.visual_focus_word || scene.anchor_word,
+        ),
+        caption_is_custom: scene.caption_is_custom ?? false,
+    });
+
+    const normalizeSceneTimeline = (scenes: SceneTimelineItem[]) => scenes.map(normalizeSceneTimelineItem);
+
     const deleteScene = (sceneId: string) => {
         setSceneTimeline(prev => {
             if (prev.length <= 1) return prev;
@@ -458,6 +574,8 @@ export default function CarouselGenerator() {
                 start_time_seconds: startTime,
                 end_time_seconds: endTime,
                 transcript_excerpt: transcriptExcerpt,
+                caption_text: buildSceneCaptionSuggestion(transcriptExcerpt, transcriptExcerpt, anchorWord),
+                caption_is_custom: false,
                 effect_transition_name: current.effect_transition_name,
                 search_queries: [],
                 stock_candidates: [],
@@ -519,6 +637,8 @@ export default function CarouselGenerator() {
                 start_time_seconds: startTime,
                 end_time_seconds: endTime,
                 transcript_excerpt: transcriptExcerpt,
+                caption_text: buildSceneCaptionSuggestion(transcriptExcerpt, transcriptExcerpt, anchorWord),
+                caption_is_custom: false,
                 effect_transition_name: previousScene?.effect_transition_name || nextScene?.effect_transition_name,
                 search_queries: [],
                 stock_candidates: [],
@@ -2555,7 +2675,7 @@ export default function CarouselGenerator() {
                                                                 setReelScript(display_script || rewritten_script);
                                                                 setAnchorWords(timeline);
                                                                 setAnchorTimeline([]);
-                                                                setSceneTimeline(scenes);
+                                                                setSceneTimeline(normalizeSceneTimeline(scenes));
                                                                 setGeneratedReelImages([]);
                                                                 setAudioPreviewUrl(`${API_BASE_URL.replace('/api/v1', '')}${audio_url}`);
                                                                 setReelDuration(Math.ceil(duration));
@@ -2766,7 +2886,7 @@ export default function CarouselGenerator() {
                                                                     setResolvingSceneCandidates(true);
                                                                     try {
                                                                         const result = await resolveSceneCandidates(reelScript, sceneTimeline);
-                                                                        setSceneTimeline(result.scenes);
+                                                                        setSceneTimeline(normalizeSceneTimeline(result.scenes));
                                                                         setSceneFilter('all');
                                                                     } catch (err: any) {
                                                                         setReelError(err.message || 'Failed to fetch scene candidates');
@@ -2798,7 +2918,7 @@ export default function CarouselGenerator() {
                                                         <div>
                                                             <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#fff' }}>Anchor Words</h4>
                                                             <p style={{ margin: '0.3rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                                                These are the exact words driving scene switches. Edit them if you want the cuts to lock to different spoken words.
+                                                                Scene switches move freely. These labels stay synced to the nearest spoken word for reference.
                                                             </p>
                                                         </div>
                                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
@@ -2923,7 +3043,7 @@ export default function CarouselGenerator() {
                                                                                 title={`${scene.anchor_word} at ${scene.start_time_seconds.toFixed(2)}s`}
                                                                             >
                                                                                 <span className={styles.transitionMarkerIndex}>{idx + 1}</span>
-                                                                                <span className={styles.transitionMarkerLabel}>{scene.anchor_word}</span>
+                                                                                <span className={styles.transitionMarkerLabel}>{scene.anchor_phrase || scene.anchor_word}</span>
                                                                             </button>
                                                                         </div>
                                                                     );
@@ -2973,7 +3093,7 @@ export default function CarouselGenerator() {
                                                                     setGeneratingSceneAi(true);
                                                                     try {
                                                                         const result = await generateSceneAiFallbacks(reelScript, sceneTimeline, maxAiGeneratedScenes);
-                                                                        setSceneTimeline(result.scenes);
+                                                                        setSceneTimeline(normalizeSceneTimeline(result.scenes));
                                                                         setSceneFilter('ai-eligible');
                                                                     } catch (err: any) {
                                                                         setReelError(err.message || 'Failed to build AI fallback prompts');
@@ -3049,6 +3169,48 @@ export default function CarouselGenerator() {
                                                                         </div>
                                                                         <div style={{ padding: '0.6rem', background: '#161616', borderRadius: '8px', fontSize: '0.82rem', color: '#ddd', fontStyle: 'italic' }}>
                                                                             "{scene.transcript_excerpt || scene.anchor_word}"
+                                                                        </div>
+                                                                        <div style={{ display: 'grid', gap: '0.4rem' }}>
+                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                                                                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                                    On-screen hook text
+                                                                                </label>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const suggested = buildSceneCaptionSuggestion(
+                                                                                            scene.transcript_excerpt || scene.anchor_phrase || scene.anchor_word,
+                                                                                            scene.anchor_phrase || scene.transcript_excerpt || scene.anchor_word,
+                                                                                            scene.visual_focus_word || scene.anchor_word,
+                                                                                        );
+                                                                                        setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                            ...item,
+                                                                                            caption_text: suggested,
+                                                                                            caption_is_custom: false,
+                                                                                        } : item));
+                                                                                    }}
+                                                                                    style={{ padding: '0.2rem 0.5rem', borderRadius: '999px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer' }}
+                                                                                >
+                                                                                    Reset auto text
+                                                                                </button>
+                                                                            </div>
+                                                                            <textarea
+                                                                                value={scene.caption_text || ''}
+                                                                                onChange={(e) => {
+                                                                                    const nextValue = e.target.value;
+                                                                                    setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                        ...item,
+                                                                                        caption_text: nextValue,
+                                                                                        caption_is_custom: true,
+                                                                                    } : item));
+                                                                                }}
+                                                                                placeholder="Optional scene text shown in the final video"
+                                                                                rows={2}
+                                                                                style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: '#f3f3f3', resize: 'vertical', fontSize: '0.84rem', lineHeight: 1.45 }}
+                                                                            />
+                                                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                                                Auto-filled from the narration for this scene. Edit it freely and the final video will use your version.
+                                                                            </div>
                                                                         </div>
                                                                         {scene.search_queries.length > 0 && (
                                                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
