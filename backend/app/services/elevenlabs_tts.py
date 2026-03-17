@@ -3,6 +3,10 @@ ElevenLabs TTS service.
 
 Uses the ElevenLabs API for high-quality, expressive text-to-speech.
 """
+import asyncio
+import os
+import tempfile
+
 import httpx
 from loguru import logger
 
@@ -70,6 +74,9 @@ REEL_VOICES = {
 
 DEFAULT_VOICE = "brian"
 DEFAULT_MODEL = "eleven_multilingual_v2"
+DEFAULT_STABILITY = 0.65
+DEFAULT_SIMILARITY_BOOST = 0.85
+DEFAULT_STYLE = 0.10
 
 
 class ElevenLabsTTS:
@@ -84,9 +91,9 @@ class ElevenLabsTTS:
         self,
         text: str,
         voice: str = DEFAULT_VOICE,
-        stability: float = 0.3,
-        similarity_boost: float = 0.75,
-        style: float = 0.4,
+        stability: float = DEFAULT_STABILITY,
+        similarity_boost: float = DEFAULT_SIMILARITY_BOOST,
+        style: float = DEFAULT_STYLE,
         speed: float = 1.0,
     ) -> bytes:
         """
@@ -95,7 +102,7 @@ class ElevenLabsTTS:
         Args:
             text: Text to convert to speech
             voice: Voice name (brian, matilda, charlie, dave, lily, adam)
-            stability: 0.0 = max variation/emotion, 1.0 = max stability (default 0.3 for expressiveness)
+            stability: 0.0 = max variation/emotion, 1.0 = max stability
             similarity_boost: How closely to match the original voice (0.0–1.0)
             style: Style exaggeration (0.0–1.0, higher = more dramatic)
             speed: Speaking speed (0.5–2.0)
@@ -125,12 +132,57 @@ class ElevenLabsTTS:
             },
         }
 
-        logger.info(f"ElevenLabs TTS: {len(text)} chars, voice={voice}, stability={stability}, style={style}")
+        logger.info(
+            f"ElevenLabs TTS: {len(text)} chars, voice={voice}, speed={speed}, "
+            f"stability={stability}, similarity_boost={similarity_boost}, style={style}"
+        )
 
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
 
         audio_bytes = resp.content
+        if abs(speed - 1.0) > 0.001:
+            audio_bytes = await self._apply_speed(audio_bytes, speed)
         logger.info(f"ElevenLabs generated audio: {len(audio_bytes)} bytes")
         return audio_bytes
+
+    async def _apply_speed(self, audio_bytes: bytes, speed: float) -> bytes:
+        """Apply speed locally so ElevenLabs voice output respects the UI slider."""
+        clamped_speed = min(max(speed, 0.5), 2.0)
+        if abs(clamped_speed - 1.0) <= 0.001:
+            return audio_bytes
+
+        input_fd, input_path = tempfile.mkstemp(suffix=".mp3")
+        output_fd, output_path = tempfile.mkstemp(suffix=".mp3")
+        try:
+            with os.fdopen(input_fd, "wb") as handle:
+                handle.write(audio_bytes)
+            os.close(output_fd)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", input_path,
+                "-filter:a", f"atempo={clamped_speed}",
+                output_path,
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                logger.warning(
+                    f"Failed to apply ElevenLabs speed={clamped_speed}; returning original audio. "
+                    f"ffmpeg stderr={stderr.decode(errors='ignore')}"
+                )
+                return audio_bytes
+
+            with open(output_path, "rb") as handle:
+                return handle.read()
+        finally:
+            if os.path.exists(input_path):
+                os.unlink(input_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
