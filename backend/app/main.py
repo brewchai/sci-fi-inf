@@ -93,6 +93,17 @@ def create_application() -> FastAPI:
 
     application.mount("/static", CORSStaticFiles(directory=static_path), name="static")
 
+    local_library_root = (settings.LOCAL_MEDIA_LIBRARY_ROOT or "").strip()
+    local_mount_path = (settings.LOCAL_MEDIA_LIBRARY_MOUNT_PATH or "/local-library").strip() or "/local-library"
+    if local_library_root:
+        local_path = os.path.abspath(os.path.expanduser(local_library_root))
+        if os.path.isdir(local_path):
+            mount_path = local_mount_path if local_mount_path.startswith("/") else f"/{local_mount_path}"
+            application.mount(mount_path, CORSStaticFiles(directory=local_path), name="local_library")
+            print(f"Mounted local media library at {mount_path} -> {local_path}")
+        else:
+            print(f"Warning: LOCAL_MEDIA_LIBRARY_ROOT does not exist: {local_path}")
+
     return application
 
 

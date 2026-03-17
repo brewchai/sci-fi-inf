@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     
     # Pexels (stock footage)
     PEXELS_API_KEY: str | None = None
+
+    # Local media library (optional)
+    LOCAL_MEDIA_LIBRARY_ROOT: str | None = None
+    LOCAL_MEDIA_METADATA_DIR: str | None = None
+    LOCAL_MEDIA_LIBRARY_MOUNT_PATH: str = "/local-library"
     
     # Together AI (image generation)
     TOGETHER_API_KEYS: str | None = None  # Comma-separated list of keys
