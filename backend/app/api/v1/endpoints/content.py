@@ -1,9 +1,12 @@
 import json
 import os
+import shutil
+import tempfile
+import uuid
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
 from loguru import logger
@@ -25,6 +28,62 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _scene_excerpt(
+    word_timestamps: list[dict],
+    start_time: float,
+    end_time: float,
+    fallback: str,
+) -> str:
+    words = [
+        w["word"].strip()
+        for w in word_timestamps
+        if w["start"] >= max(0, start_time - 0.05) and w["start"] < max(start_time + 0.05, end_time - 0.05)
+    ]
+    text = " ".join(word for word in words if word)
+    return text or fallback
+
+
+def _build_scene_timeline(
+    anchors: list[dict],
+    word_timestamps: list[dict],
+    total_duration: float,
+) -> list["SceneTimelineItem"]:
+    scenes: list["SceneTimelineItem"] = []
+    for idx, anchor in enumerate(anchors):
+        start_time = float(anchor["start"])
+        next_start = float(anchors[idx + 1]["start"]) if idx < len(anchors) - 1 else total_duration
+        end_time = max(next_start, float(anchor.get("end", start_time)))
+        anchor_word = str(anchor["word"]).strip()
+        scenes.append(SceneTimelineItem(
+            scene_id=f"scene-{idx + 1}",
+            anchor_word=anchor_word,
+            visual_focus_word=str(anchor.get("focus_word", anchor_word)).strip(),
+            anchor_phrase=str(anchor.get("anchor_phrase", anchor_word)).strip(),
+            start_time_seconds=start_time,
+            end_time_seconds=end_time,
+            transcript_excerpt=_scene_excerpt(
+                word_timestamps,
+                start_time,
+                next_start,
+                str(anchor.get("anchor_phrase") or anchor.get("focus_word") or anchor_word),
+            ),
+            effect_transition_name=anchor.get("effect_transition_name"),
+            asset_source="none",
+            scene_state="unresolved",
+        ))
+    return scenes
+
+
+def _save_audio_preview(audio_path: str, suffix: str = ".mp3") -> tuple[str, str]:
+    audio_id = str(uuid.uuid4())
+    suffix = suffix if suffix.startswith(".") else f".{suffix}"
+    audio_filename = f"preview_{audio_id}{suffix}"
+    save_dir = os.path.join(os.getcwd(), "static", "audio_previews")
+    os.makedirs(save_dir, exist_ok=True)
+    final_audio_path = os.path.join(save_dir, audio_filename)
+    shutil.move(audio_path, final_audio_path)
+    return final_audio_path, f"/static/audio_previews/{audio_filename}"
 
 async def _ensure_english_titles(papers: list, db: AsyncSession) -> None:
     """Send ALL titles to the LLM — translate non-English ones, return English ones unchanged.
@@ -629,10 +688,64 @@ async def rewrite_voice_script(request: RewriteVoiceScriptRequest):
     rewritten_script = await rewriter.rewrite(request.script)
     return RewriteVoiceScriptResponse(rewritten_script=rewritten_script)
 
+
+class PunctuateTranscriptRequest(BaseModel):
+    transcript: str = Field(..., description="Raw transcript text to punctuate and clean for display")
+
+
+class PunctuateTranscriptResponse(BaseModel):
+    display_transcript: str
+
+
+async def _punctuate_display_transcript(transcript: str, strict: bool = False) -> str:
+    """Punctuate and lightly clean transcript text for display only (timings remain untouched)."""
+    text = (transcript or "").strip()
+    if not text:
+        return ""
+
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    system_prompt = (
+        "You are a transcript cleaner for short-form science narration. "
+        "Return only cleaned transcript text.\n"
+        "Rules:\n"
+        "1. Add natural punctuation and sentence casing.\n"
+        "2. Remove filler words and disfluencies (uh, um, like, you know, kind of, sort of, basically, actually) when safe.\n"
+        "3. Keep semantic meaning unchanged.\n"
+        "4. Do not add new facts.\n"
+        "5. Output plain text only."
+    )
+    try:
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text},
+            ],
+            temperature=0.1,
+            max_tokens=2500,
+        )
+        cleaned = (resp.choices[0].message.content or "").strip()
+        return cleaned or text
+    except Exception as exc:
+        logger.exception("Failed to punctuate transcript; using raw transcript")
+        if strict:
+            raise HTTPException(status_code=500, detail=f"Punctuation failed: {exc}")
+        return text
+
+
+@router.post("/punctuate-transcript", response_model=PunctuateTranscriptResponse)
+async def punctuate_transcript(request: PunctuateTranscriptRequest):
+    if not request.transcript.strip():
+        raise HTTPException(status_code=400, detail="transcript is required")
+    display_transcript = await _punctuate_display_transcript(request.transcript, strict=True)
+    return PunctuateTranscriptResponse(display_transcript=display_transcript)
+
 class AnchorWord(BaseModel):
     word: str
     start_time_seconds: float
     end_time_seconds: float
+    focus_word: Optional[str] = None
+    anchor_phrase: Optional[str] = None
 
 class TimelineEvent(BaseModel):
     image_url: str = Field(..., description="The AI Image generation URL or raw prompt text")
@@ -644,21 +757,61 @@ class CompileAudioTimelineRequest(BaseModel):
     voice: str = Field("alloy", description="Voice ID to use for TTS")
     voice_provider: str = Field("openai", description="TTS Provider (openai/elevenlabs)")
     speed: float = Field(1.0, description="TTS speed multiplier")
-    elevenlabs_stability: float = Field(default=0.3, ge=0.0, le=1.0, description="ElevenLabs stability setting")
-    elevenlabs_similarity_boost: float = Field(default=0.75, ge=0.0, le=1.0, description="ElevenLabs similarity boost setting")
-    elevenlabs_style: float = Field(default=0.4, ge=0.0, le=1.0, description="ElevenLabs style exaggeration setting")
+    elevenlabs_stability: float = Field(default=0.65, ge=0.0, le=1.0, description="ElevenLabs stability setting")
+    elevenlabs_similarity_boost: float = Field(default=0.85, ge=0.0, le=1.0, description="ElevenLabs similarity boost setting")
+    elevenlabs_style: float = Field(default=0.1, ge=0.0, le=1.0, description="ElevenLabs style exaggeration setting")
 
 class WordTimestamp(BaseModel):
     word: str
     start: float
     end: float
 
+
+class SceneAssetCandidate(BaseModel):
+    candidate_id: str
+    type: str
+    thumbnail_url: str
+    asset_url: str
+    source_provider: str
+    width: int = 0
+    height: int = 0
+    duration_seconds: Optional[float] = None
+    query: str
+    score: float = 0.0
+
+
+class SelectedSceneAsset(BaseModel):
+    asset_source: str = Field(..., description="local_image | local_video | stock_image | stock_video | ai_image | user_image | user_video | none")
+    asset_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    candidate_id: Optional[str] = None
+
+
+class SceneTimelineItem(BaseModel):
+    scene_id: str
+    anchor_word: str
+    visual_focus_word: Optional[str] = None
+    anchor_phrase: Optional[str] = None
+    start_time_seconds: float
+    end_time_seconds: float
+    transcript_excerpt: str
+    effect_transition_name: Optional[str] = None
+    search_queries: list[str] = Field(default_factory=list)
+    stock_candidates: list[SceneAssetCandidate] = Field(default_factory=list)
+    selected_asset: Optional[SelectedSceneAsset] = None
+    ai_prompt: Optional[str] = None
+    ai_image_url: Optional[str] = None
+    asset_source: str = "none"
+    scene_state: str = "unresolved"
+
 class CompileAudioTimelineResponse(BaseModel):
     audio_url: str
     timeline: list[AnchorWord]
+    scenes: list[SceneTimelineItem]
     duration: float
     word_timestamps: list[WordTimestamp]
     rewritten_script: str
+    display_script: str
 
 @router.post("/compile-audio-timeline", response_model=CompileAudioTimelineResponse)
 async def compile_audio_timeline(request: CompileAudioTimelineRequest):
@@ -668,7 +821,6 @@ async def compile_audio_timeline(request: CompileAudioTimelineRequest):
     3. Runs the LLM to map Anchor Words to FLUX prompts at 3s intervals.
     """
     from app.services.reel_generator import ReelGenerator
-    from app.services.timeline_extractor import extract_timeline_prompts
     
     if not request.script.strip():
         raise HTTPException(status_code=400, detail="script is required")
@@ -694,18 +846,7 @@ async def compile_audio_timeline(request: CompileAudioTimelineRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"TTS Generation failed: {str(e)}")
         
-    # Move the audio to a static URL so the frontend can preview it
-    import os
-    import shutil
-    import uuid
-    audio_id = str(uuid.uuid4())
-    audio_filename = f"preview_{audio_id}.mp3"
-    save_dir = os.path.join(os.getcwd(), "static", "audio_previews")
-    os.makedirs(save_dir, exist_ok=True)
-    final_audio_path = os.path.join(save_dir, audio_filename)
-    
-    shutil.move(audio_path, final_audio_path)
-    audio_url = f"/static/audio_previews/{audio_filename}"
+    _, audio_url = _save_audio_preview(audio_path, ".mp3")
     
     # Calculate audio duration
     duration = 0.0
@@ -716,21 +857,158 @@ async def compile_audio_timeline(request: CompileAudioTimelineRequest):
     from app.services.anchor_selector import AnchorSelector
     selector = AnchorSelector()
     anchors = await selector.select_anchors(word_timestamps)
+    anchors = await selector.assign_effects(final_script, anchors)
     
     timeline = []
     for item in anchors:
         timeline.append(AnchorWord(
             word=item["word"],
             start_time_seconds=item["start"],
-            end_time_seconds=item["end"]
+            end_time_seconds=item["end"],
+            focus_word=item.get("focus_word"),
+            anchor_phrase=item.get("anchor_phrase"),
         ))
+    scenes = _build_scene_timeline(anchors, word_timestamps, duration)
         
     return CompileAudioTimelineResponse(
         audio_url=audio_url,
         timeline=timeline,
+        scenes=scenes,
         duration=duration,
         word_timestamps=[WordTimestamp(word=w["word"], start=w["start"], end=w["end"]) for w in word_timestamps] if word_timestamps else [],
         rewritten_script=final_script,
+        display_script=final_script,
+    )
+
+
+@router.post("/compile-uploaded-audio-timeline", response_model=CompileAudioTimelineResponse)
+async def compile_uploaded_audio_timeline(
+    audio_file: UploadFile = File(...),
+    transcript_text: Optional[str] = Form(default=None),
+):
+    """Compile uploaded narration audio into timestamps, anchors, and scenes."""
+    from app.services.reel_generator import ReelGenerator
+    from app.services.anchor_selector import AnchorSelector
+
+    if not audio_file.filename:
+        raise HTTPException(status_code=400, detail="audio_file is required")
+
+    suffix = os.path.splitext(audio_file.filename)[1] or ".mp3"
+    fd, temp_audio_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+
+    try:
+        with open(temp_audio_path, "wb") as f:
+            shutil.copyfileobj(audio_file.file, f)
+
+        generator = ReelGenerator()
+        raw_words = await generator._get_word_timestamps(temp_audio_path)
+        display_script = (transcript_text or "").strip()
+        word_timestamps = raw_words
+        if display_script:
+            display_script = await _punctuate_display_transcript(display_script)
+        else:
+            display_script = await _punctuate_display_transcript(" ".join(w["word"] for w in raw_words).strip())
+
+        duration = word_timestamps[-1]["end"] + 0.5 if word_timestamps else 0.0
+        selector = AnchorSelector()
+        anchors = await selector.select_anchors(word_timestamps)
+        anchors = await selector.assign_effects(display_script, anchors)
+        scenes = _build_scene_timeline(anchors, word_timestamps, duration)
+        _, audio_url = _save_audio_preview(temp_audio_path, suffix)
+
+        timeline = [
+            AnchorWord(
+                word=item["word"],
+                start_time_seconds=item["start"],
+                end_time_seconds=item["end"],
+                focus_word=item.get("focus_word"),
+                anchor_phrase=item.get("anchor_phrase"),
+            )
+            for item in anchors
+        ]
+        return CompileAudioTimelineResponse(
+            audio_url=audio_url,
+            timeline=timeline,
+            scenes=scenes,
+            duration=duration,
+            word_timestamps=[WordTimestamp(word=w["word"], start=w["start"], end=w["end"]) for w in word_timestamps],
+            rewritten_script=display_script,
+            display_script=display_script,
+        )
+    except Exception as exc:
+        logger.exception("Uploaded audio compile failed")
+        raise HTTPException(status_code=500, detail=f"Uploaded audio compile failed: {exc}")
+    finally:
+        try:
+            audio_file.file.close()
+        except Exception:
+            pass
+        if os.path.exists(temp_audio_path):
+            try:
+                os.unlink(temp_audio_path)
+            except OSError:
+                pass
+
+
+class UploadSceneAssetResponse(BaseModel):
+    asset_source: str
+    asset_url: str
+    thumbnail_url: Optional[str] = None
+    width: int = 0
+    height: int = 0
+    duration_seconds: Optional[float] = None
+
+
+@router.post("/upload-scene-asset", response_model=UploadSceneAssetResponse)
+async def upload_scene_asset(file: UploadFile = File(...)):
+    """Upload a user image/video for scene assignment."""
+    from app.services.storage import StorageService
+    from app.services.reel_generator import ReelGenerator
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="file is required")
+
+    content_type = (file.content_type or "").lower()
+    is_image = content_type.startswith("image/")
+    is_video = content_type.startswith("video/")
+    if not is_image and not is_video:
+        raise HTTPException(status_code=400, detail="Only image/* or video/* files are supported")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(file_bytes) > 300 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 300MB)")
+
+    ext = os.path.splitext(file.filename)[1].lower() or (".mp4" if is_video else ".jpg")
+    safe_ext = ext if ext in {".mp4", ".mov", ".webm", ".png", ".jpg", ".jpeg", ".webp"} else (".mp4" if is_video else ".jpg")
+    filename = f"user_uploads/{uuid.uuid4().hex}{safe_ext}"
+
+    storage = StorageService()
+    asset_url = storage.upload_file(file_bytes, filename, content_type or "application/octet-stream")
+
+    width = 0
+    height = 0
+    duration_seconds: Optional[float] = None
+    if is_video:
+        try:
+            fd, temp_path = tempfile.mkstemp(suffix=safe_ext)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(file_bytes)
+            generator = ReelGenerator()
+            duration_seconds = await generator._get_audio_duration(temp_path)
+            os.unlink(temp_path)
+        except Exception:
+            logger.exception("Failed to inspect uploaded video metadata")
+
+    return UploadSceneAssetResponse(
+        asset_source="user_video" if is_video else "user_image",
+        asset_url=asset_url,
+        thumbnail_url=asset_url if is_image else None,
+        width=width,
+        height=height,
+        duration_seconds=duration_seconds,
     )
 
 class FetchVisualsRequest(BaseModel):
@@ -758,6 +1036,135 @@ async def fetch_visuals(request: FetchVisualsRequest):
     return FetchVisualsResponse(
         clips=[FetchVisualsClip(url=c["url"], thumbnail=c.get("thumbnail", ""), keyword=c["keyword"], duration=c["duration"]) for c in clips]
     )
+
+
+class LocalLibraryAssetsResponse(BaseModel):
+    assets: list[SceneAssetCandidate]
+
+
+@router.get("/local-library-assets", response_model=LocalLibraryAssetsResponse)
+async def local_library_assets(limit: int = Query(default=500, ge=1, le=5000)):
+    """List local library assets for manual per-scene selection."""
+    from app.services.local_media_library import LocalMediaLibraryService
+
+    library = LocalMediaLibraryService()
+    if not library.is_enabled():
+        return LocalLibraryAssetsResponse(assets=[])
+
+    rows = library.list_assets(limit=limit)
+    return LocalLibraryAssetsResponse(
+        assets=[SceneAssetCandidate(**row) for row in rows]
+    )
+
+
+class ResolveSceneCandidatesRequest(BaseModel):
+    script: str = Field(..., description="Narration script or transcript backing the scenes")
+    scenes: list[SceneTimelineItem]
+    llm_rerank: bool = Field(default=True, description="Whether to apply whole-story LLM reranking on top of heuristic candidate scores")
+
+
+class ResolveSceneCandidatesResponse(BaseModel):
+    scenes: list[SceneTimelineItem]
+
+
+@router.post("/resolve-scene-candidates", response_model=ResolveSceneCandidatesResponse)
+async def resolve_scene_candidates(request: ResolveSceneCandidatesRequest):
+    """Populate stock search queries and ranked stock candidates for each scene."""
+    from app.services.visual_search import search_scene_candidates
+
+    scenes_payload = []
+    for scene in request.scenes:
+        scenes_payload.append({
+            "scene_id": scene.scene_id,
+            "anchor_word": scene.anchor_word,
+            "visual_focus_word": scene.visual_focus_word,
+            "anchor_phrase": scene.anchor_phrase,
+            "transcript_excerpt": scene.transcript_excerpt,
+            "start_time_seconds": scene.start_time_seconds,
+            "end_time_seconds": scene.end_time_seconds,
+        })
+
+    candidates_by_scene = await search_scene_candidates(
+        scenes_payload,
+        full_script=request.script,
+        llm_rerank=request.llm_rerank,
+        include_local_candidates=False,
+    )
+    updated_scenes: list[SceneTimelineItem] = []
+    for scene in request.scenes:
+        payload_match = next((item for item in scenes_payload if item["scene_id"] == scene.scene_id), None) or {}
+        candidate_rows = candidates_by_scene.get(scene.scene_id, [])
+        update_payload = {
+            "search_queries": payload_match.get("search_queries", []),
+            "stock_candidates": [SceneAssetCandidate(**candidate) for candidate in candidate_rows],
+            "scene_state": scene.scene_state if scene.asset_source != "none" else "unresolved",
+        }
+        updated_scenes.append(scene.model_copy(update=update_payload))
+    return ResolveSceneCandidatesResponse(scenes=updated_scenes)
+
+
+class GenerateSceneAIFallbacksRequest(BaseModel):
+    script: str = Field(..., description="Narration script or transcript backing the scenes")
+    scenes: list[SceneTimelineItem]
+    max_ai_generated_scenes: int = Field(default=3, ge=0, le=20)
+
+
+class GenerateSceneAIFallbacksResponse(BaseModel):
+    scenes: list[SceneTimelineItem]
+
+
+@router.post("/generate-scene-ai-fallbacks", response_model=GenerateSceneAIFallbacksResponse)
+async def generate_scene_ai_fallbacks(request: GenerateSceneAIFallbacksRequest):
+    """Generate AI prompts only for unresolved scenes, respecting the configured cap."""
+    from app.services.anchor_selector import AnchorSelector
+
+    unresolved = [
+        scene for scene in request.scenes
+        if scene.asset_source == "none" and not scene.ai_image_url
+    ]
+    unresolved.sort(key=lambda scene: scene.start_time_seconds)
+    eligible_ids = {scene.scene_id for scene in unresolved[:request.max_ai_generated_scenes]}
+
+    selector = AnchorSelector()
+    anchors = [
+        {
+            "word": scene.anchor_word,
+            "start": scene.start_time_seconds,
+            "end": scene.end_time_seconds,
+            "focus_word": scene.visual_focus_word or scene.anchor_word,
+            "anchor_phrase": scene.anchor_phrase or scene.anchor_word,
+        }
+        for scene in unresolved[:request.max_ai_generated_scenes]
+    ]
+    prompt_rows = await selector.generate_prompts(request.script, anchors) if anchors else []
+    prompt_map = {f"scene-{idx + 1}": row for idx, row in enumerate(prompt_rows)}
+    start_map = {row["start_time_seconds"]: row for row in prompt_rows}
+
+    updated_scenes: list[SceneTimelineItem] = []
+    for idx, scene in enumerate(request.scenes):
+        row = prompt_map.get(scene.scene_id) or start_map.get(scene.start_time_seconds)
+        if scene.asset_source != "none":
+            if scene.asset_source.startswith("local"):
+                resolved_state = "resolved_by_library"
+            elif scene.asset_source.startswith("stock"):
+                resolved_state = "resolved_by_stock"
+            elif scene.asset_source.startswith("user"):
+                resolved_state = "resolved_by_user"
+            else:
+                resolved_state = "resolved_by_ai"
+            updated_scenes.append(scene.model_copy(update={"scene_state": resolved_state}))
+            continue
+        if scene.scene_id in eligible_ids and row:
+            updated_scenes.append(scene.model_copy(update={
+                "ai_prompt": row["prompt"],
+                "effect_transition_name": row.get("effect_transition_name") or scene.effect_transition_name,
+                "scene_state": "ai_eligible",
+            }))
+        elif scene.scene_id in eligible_ids:
+            updated_scenes.append(scene.model_copy(update={"scene_state": "ai_eligible"}))
+        else:
+            updated_scenes.append(scene.model_copy(update={"scene_state": "ai_blocked_by_cap"}))
+    return GenerateSceneAIFallbacksResponse(scenes=updated_scenes)
 
 
 # ---------------------------------------------------------------------------
@@ -837,10 +1244,10 @@ async def generate_reel_from_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    if not request.custom_text:
+    if not request.custom_text and not request.audio_url:
         raise HTTPException(
             status_code=400,
-            detail="Custom text is required for standalone paper reels since there is no podcast audio.",
+            detail="Either custom_text or audio_url is required for standalone paper reels.",
         )
 
     if not paper.eli5_summary or not paper.key_takeaways:
@@ -871,6 +1278,7 @@ async def generate_reel_from_paper(
             overlay_video_url=request.overlay_video_url,
             background_clip_paths=clip_paths,
             anchor_timeline=request.anchor_timeline,
+            scene_timeline=request.scene_timeline,
             word_timestamps=request.word_timestamps,
             voice=request.voice,
             speed=request.speed,
@@ -902,8 +1310,8 @@ async def generate_custom_reel(
     """Generate a reel from custom user-provided script. No paper or episode needed."""
     from app.services.reel_generator import ReelGenerator
 
-    if not request.custom_text:
-        raise HTTPException(status_code=400, detail="custom_text is required")
+    if not request.custom_text and not request.audio_url:
+        raise HTTPException(status_code=400, detail="Either custom_text or audio_url is required")
 
     clip_paths = None
     if request.background_clip_urls and len(request.background_clip_urls) > 0:
@@ -927,6 +1335,7 @@ async def generate_custom_reel(
             overlay_video_url=request.overlay_video_url,
             background_clip_paths=clip_paths,
             anchor_timeline=request.anchor_timeline,
+            scene_timeline=request.scene_timeline,
             word_timestamps=request.word_timestamps,
             voice=request.voice,
             speed=request.speed,
@@ -969,7 +1378,13 @@ async def generate_prompts_from_anchors(request: GeneratePromptsFromAnchorsReque
     
     # Convert AnchorWord models to dicts for the service
     anchors_dict = [
-        {"word": a.word, "start": a.start_time_seconds, "end": a.end_time_seconds}
+        {
+            "word": a.word,
+            "start": a.start_time_seconds,
+            "end": a.end_time_seconds,
+            "focus_word": a.focus_word or a.word,
+            "anchor_phrase": a.anchor_phrase or a.word,
+        }
         for a in request.anchors
     ]
     
