@@ -100,6 +100,7 @@ async def extract_visual_keywords(
 
 async def extract_scene_search_queries(
     scenes: list[dict],
+    full_script: str = "",
     max_queries: int = 3,
 ) -> dict[str, list[str]]:
     """Generate stock-searchable queries per scene from transcript slices."""
@@ -107,6 +108,10 @@ async def extract_scene_search_queries(
         return {}
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    normalized_story = " ".join((full_script or "").split()).strip()
+    if len(normalized_story) > 7000:
+        normalized_story = normalized_story[:7000] + "..."
+
     scene_prompt = []
     for scene in scenes:
         scene_prompt.append(
@@ -120,15 +125,23 @@ async def extract_scene_search_queries(
         )
 
     prompt = (
-        "You are a stock-visual researcher building viral science reels.\n"
+        "You are the most viral AI video reel director on the internet.\n"
+        "You are planning stock footage searches for a vertical science reel.\n"
+        "Use the full narration for story context, but write search terms only for the specific current scene.\n"
         "For each scene, produce exactly "
-        f"{max_queries} short search queries that work well on Pexels.\n"
+        f"{max_queries} short search queries that work well on Pexels video search.\n"
         "Rules:\n"
         "- Queries must be concrete visual things a camera can capture.\n"
+        "- Keep every query simple, punchy, and not too compound.\n"
+        "- Prefer 1-3 words. 4 words maximum only when absolutely necessary.\n"
         "- Use visual_focus_word and anchor_phrase as semantic source of truth when anchor_word is too generic.\n"
-        "- Favor close-up human emotion, scientific apparatus, observable motion, and strong portrait framing.\n"
+        "- Favor human emotion, scientific apparatus, observable motion, and strong portrait framing.\n"
+        "- Prioritize terms likely to return dynamic video, not static concepts.\n"
         "- Avoid abstract concepts and academic phrasing.\n"
+        "- Avoid stacking multiple nouns into one long search phrase.\n"
+        "- Return broad-enough search terms that stock libraries are likely to have results for.\n"
         "- Return JSON: {\"scenes\": [{\"scene_id\": \"...\", \"queries\": [\"...\", ...]}]}\n\n"
+        f"FULL NARRATION:\n{normalized_story}\n\n"
         f"SCENES:\n{json.dumps(scene_prompt, ensure_ascii=False)}"
     )
 
@@ -144,7 +157,13 @@ async def extract_scene_search_queries(
         results: dict[str, list[str]] = {}
         for item in data.get("scenes", []):
             scene_id = str(item.get("scene_id", "")).strip()
-            queries = [str(q).strip() for q in item.get("queries", []) if str(q).strip()]
+            raw_queries = [str(q).strip() for q in item.get("queries", []) if str(q).strip()]
+            queries: list[str] = []
+            for query in raw_queries:
+                words = [word for word in query.split() if word]
+                simplified = " ".join(words[:4]).strip()
+                if simplified and simplified not in queries:
+                    queries.append(simplified)
             if scene_id:
                 results[scene_id] = queries[:max_queries]
         return results
@@ -158,8 +177,8 @@ async def extract_scene_search_queries(
             excerpt = str(scene.get("transcript_excerpt", "")).strip()
             semantic_seed = " ".join(part for part in [focus, phrase, excerpt] if part)
             seed_words = [word for word in semantic_seed.split() if len(word) > 3][:7]
-            query = " ".join(seed_words[:3]).strip() or focus or anchor or "science laboratory"
-            fallback[scene["scene_id"]] = [query, focus or query, "scientist close up"]
+            query = " ".join(seed_words[:2]).strip() or focus or anchor or "science lab"
+            fallback[scene["scene_id"]] = [query, focus or query, "scientist", "lab closeup"][:max_queries]
         return fallback
 
 
@@ -445,7 +464,7 @@ async def search_scene_candidates(
     llm_rerank: bool = True,
     include_local_candidates: bool = True,
     max_queries_per_scene: int = 3,
-    max_candidates_per_scene: int = 6,
+    max_candidates_per_scene: int = 7,
 ) -> dict[str, list[dict]]:
     """Return ranked stock image/video candidates keyed by scene id."""
     if not scenes:
@@ -469,7 +488,11 @@ async def search_scene_candidates(
 
     api_key = settings.PEXELS_API_KEY
 
-    queries_by_scene = await extract_scene_search_queries(scenes, max_queries=max_queries_per_scene)
+    queries_by_scene = await extract_scene_search_queries(
+        scenes,
+        full_script=full_script,
+        max_queries=max_queries_per_scene,
+    )
     results: dict[str, list[dict]] = {scene["scene_id"]: [] for scene in scenes}
 
     if not api_key:
@@ -489,58 +512,22 @@ async def search_scene_candidates(
         for scene in scenes:
             scene_id = scene["scene_id"]
             is_hook = False
-            scene_candidates: list[StockAssetCandidate] = []
+            video_candidates: list[StockAssetCandidate] = []
+            image_candidates: list[StockAssetCandidate] = []
             queries = queries_by_scene.get(scene_id, [])[:max_queries_per_scene]
 
             for q_idx, query in enumerate(queries):
                 if not query:
                     continue
                 try:
-                    image_resp = await client.get(
-                        PEXELS_IMAGE_SEARCH_URL,
-                        params={"query": query, "per_page": 3, "orientation": "portrait", "size": "medium"},
-                        headers=headers,
-                    )
-                    image_resp.raise_for_status()
-                    image_data = image_resp.json()
-                    for idx, photo in enumerate(image_data.get("photos", [])[:2]):
-                        src = photo.get("src", {}) or {}
-                        asset_url = src.get("large2x") or src.get("large") or src.get("original")
-                        thumbnail_url = src.get("medium") or src.get("small") or asset_url
-                        if not asset_url:
-                            continue
-                        score = _score_visual_candidate(
-                            query=query,
-                            width=photo.get("width", 0),
-                            height=photo.get("height", 0),
-                            duration_seconds=None,
-                            is_hook=is_hook,
-                            asset_type="stock_image",
-                        )
-                        scene_candidates.append(StockAssetCandidate(
-                            candidate_id=f"{scene_id}-img-{q_idx}-{idx}",
-                            type="stock_image",
-                            asset_url=asset_url,
-                            thumbnail_url=thumbnail_url,
-                            source_provider="pexels",
-                            width=photo.get("width", 0),
-                            height=photo.get("height", 0),
-                            duration_seconds=None,
-                            query=query,
-                            score=score,
-                        ))
-                except Exception as exc:
-                    logger.warning(f"Pexels image search failed for '{query}': {exc}")
-
-                try:
                     video_resp = await client.get(
                         PEXELS_VIDEO_SEARCH_URL,
-                        params={"query": query, "per_page": 3, "orientation": "portrait", "size": "medium"},
+                        params={"query": query, "per_page": 5, "orientation": "portrait", "size": "medium"},
                         headers=headers,
                     )
                     video_resp.raise_for_status()
                     video_data = video_resp.json()
-                    for idx, video in enumerate(video_data.get("videos", [])[:2]):
+                    for idx, video in enumerate(video_data.get("videos", [])[:3]):
                         best_file = _pick_best_video_file(video.get("video_files", []))
                         if not best_file:
                             continue
@@ -554,7 +541,7 @@ async def search_scene_candidates(
                             is_hook=is_hook,
                             asset_type="stock_video",
                         )
-                        scene_candidates.append(StockAssetCandidate(
+                        video_candidates.append(StockAssetCandidate(
                             candidate_id=f"{scene_id}-vid-{q_idx}-{idx}",
                             type="stock_video",
                             asset_url=best_file["link"],
@@ -569,6 +556,49 @@ async def search_scene_candidates(
                 except Exception as exc:
                     logger.warning(f"Pexels video search failed for '{query}': {exc}")
 
+            # Only fall back to images when no usable videos were found for the scene.
+            if not video_candidates:
+                for q_idx, query in enumerate(queries):
+                    if not query:
+                        continue
+                    try:
+                        image_resp = await client.get(
+                            PEXELS_IMAGE_SEARCH_URL,
+                            params={"query": query, "per_page": 5, "orientation": "portrait", "size": "medium"},
+                            headers=headers,
+                        )
+                        image_resp.raise_for_status()
+                        image_data = image_resp.json()
+                        for idx, photo in enumerate(image_data.get("photos", [])[:3]):
+                            src = photo.get("src", {}) or {}
+                            asset_url = src.get("large2x") or src.get("large") or src.get("original")
+                            thumbnail_url = src.get("medium") or src.get("small") or asset_url
+                            if not asset_url:
+                                continue
+                            score = _score_visual_candidate(
+                                query=query,
+                                width=photo.get("width", 0),
+                                height=photo.get("height", 0),
+                                duration_seconds=None,
+                                is_hook=is_hook,
+                                asset_type="stock_image",
+                            )
+                            image_candidates.append(StockAssetCandidate(
+                                candidate_id=f"{scene_id}-img-{q_idx}-{idx}",
+                                type="stock_image",
+                                asset_url=asset_url,
+                                thumbnail_url=thumbnail_url,
+                                source_provider="pexels",
+                                width=photo.get("width", 0),
+                                height=photo.get("height", 0),
+                                duration_seconds=None,
+                                query=query,
+                                score=score,
+                            ))
+                    except Exception as exc:
+                        logger.warning(f"Pexels image search failed for '{query}': {exc}")
+
+            scene_candidates = video_candidates if video_candidates else image_candidates
             deduped: dict[str, StockAssetCandidate] = {}
             for candidate in scene_candidates:
                 deduped.setdefault(candidate.asset_url, candidate)
