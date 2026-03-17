@@ -394,6 +394,8 @@ class SceneTimelineEvent(BaseModel):
     start_time_seconds: float
     end_time_seconds: float
     transcript_excerpt: Optional[str] = None
+    caption_text: Optional[str] = None
+    caption_is_custom: bool = False
     effect_transition_name: Optional[str] = None
     selected_asset: Optional[SelectedSceneAsset] = None
     ai_prompt: Optional[str] = None

@@ -318,6 +318,8 @@ export interface SceneTimelineItem {
     start_time_seconds: number;
     end_time_seconds: number;
     transcript_excerpt: string;
+    caption_text?: string | null;
+    caption_is_custom?: boolean;
     effect_transition_name?: string;
     search_queries: string[];
     stock_candidates: SceneAssetCandidate[];

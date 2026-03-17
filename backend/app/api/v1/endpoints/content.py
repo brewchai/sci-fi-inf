@@ -44,6 +44,52 @@ def _scene_excerpt(
     return text or fallback
 
 
+def _build_scene_caption_suggestion(
+    transcript_excerpt: str,
+    anchor_phrase: str = "",
+    focus_word: str = "",
+) -> str:
+    source_text = (anchor_phrase or transcript_excerpt or focus_word or "").strip()
+    if not source_text:
+        return ""
+
+    cleaned = " ".join(source_text.replace("\n", " ").split())
+    raw_tokens = [token.strip(" ,.!?;:\"'()[]{}") for token in cleaned.split()]
+    tokens = [token for token in raw_tokens if token]
+    if not tokens:
+        return ""
+
+    lowered = [token.lower() for token in tokens]
+    leading_fillers = {
+        "i", "we", "you", "they", "he", "she", "it",
+        "was", "were", "am", "is", "are", "be", "been", "being",
+        "have", "has", "had", "do", "did", "does",
+        "to", "that", "just", "really", "kind", "sort",
+    }
+    while len(tokens) > 2 and lowered and lowered[0] in leading_fillers:
+        tokens.pop(0)
+        lowered.pop(0)
+
+    lowered = [token.lower() for token in tokens]
+    if "to" in lowered:
+        idx = lowered.index("to")
+        tail = tokens[idx + 1:]
+        if 1 <= len(tail) <= 4:
+            return " ".join(tail)
+
+    if "for" in lowered:
+        idx = lowered.index("for")
+        start_idx = max(0, idx - 1)
+        tail = tokens[start_idx:]
+        if 2 <= len(tail) <= 4:
+            return " ".join(tail)
+
+    if len(tokens) <= 4:
+        return " ".join(tokens)
+
+    return " ".join(tokens[-3:])
+
+
 def _build_scene_timeline(
     anchors: list[dict],
     word_timestamps: list[dict],
@@ -55,19 +101,28 @@ def _build_scene_timeline(
         next_start = float(anchors[idx + 1]["start"]) if idx < len(anchors) - 1 else total_duration
         end_time = max(next_start, float(anchor.get("end", start_time)))
         anchor_word = str(anchor["word"]).strip()
+        transcript_excerpt = _scene_excerpt(
+            word_timestamps,
+            start_time,
+            next_start,
+            str(anchor.get("anchor_phrase") or anchor.get("focus_word") or anchor_word),
+        )
+        anchor_phrase = str(anchor.get("anchor_phrase", anchor_word)).strip()
+        visual_focus_word = str(anchor.get("focus_word", anchor_word)).strip()
         scenes.append(SceneTimelineItem(
             scene_id=f"scene-{idx + 1}",
             anchor_word=anchor_word,
-            visual_focus_word=str(anchor.get("focus_word", anchor_word)).strip(),
-            anchor_phrase=str(anchor.get("anchor_phrase", anchor_word)).strip(),
+            visual_focus_word=visual_focus_word,
+            anchor_phrase=anchor_phrase,
             start_time_seconds=start_time,
             end_time_seconds=end_time,
-            transcript_excerpt=_scene_excerpt(
-                word_timestamps,
-                start_time,
-                next_start,
-                str(anchor.get("anchor_phrase") or anchor.get("focus_word") or anchor_word),
+            transcript_excerpt=transcript_excerpt,
+            caption_text=_build_scene_caption_suggestion(
+                transcript_excerpt,
+                anchor_phrase=anchor_phrase,
+                focus_word=visual_focus_word,
             ),
+            caption_is_custom=False,
             effect_transition_name=anchor.get("effect_transition_name"),
             asset_source="none",
             scene_state="unresolved",
@@ -795,6 +850,8 @@ class SceneTimelineItem(BaseModel):
     start_time_seconds: float
     end_time_seconds: float
     transcript_excerpt: str
+    caption_text: Optional[str] = None
+    caption_is_custom: bool = False
     effect_transition_name: Optional[str] = None
     search_queries: list[str] = Field(default_factory=list)
     stock_candidates: list[SceneAssetCandidate] = Field(default_factory=list)

@@ -213,6 +213,7 @@ class ReelGenerator:
                 main_duration=main_duration,
                 cta_word_timestamps=cta_word_timestamps,
                 closing_statement=closing_statement,
+                scene_timeline=scene_timeline,
             )
             ass_fd, ass_path = tempfile.mkstemp(suffix='.ass')
             with os.fdopen(ass_fd, 'w', encoding='utf-8') as f:
@@ -1049,11 +1050,20 @@ class ReelGenerator:
         main_duration: float | None = None,
         cta_word_timestamps: list[dict] | None = None,
         closing_statement: str | None = None,
+        scene_timeline: list | None = None,
     ) -> str:
         """Generate ASS subtitles with animated transitions for the reel."""
 
-        # Build word-by-word caption dialogues
-        caption_dialogues = self._build_caption_dialogues(word_timestamps, duration)
+        if scene_timeline:
+            caption_dialogues = self._build_scene_caption_dialogues(
+                scene_timeline,
+                main_duration or duration,
+            )
+        else:
+            caption_dialogues = self._build_caption_dialogues(word_timestamps, duration)
+
+        if cta_word_timestamps:
+            caption_dialogues += self._build_caption_dialogues(cta_word_timestamps, duration)
 
         return f"""[Script Info]
 Title: Eureka Feed Reel
@@ -1070,6 +1080,64 @@ Style: Caption,Avenir Next,120,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 {caption_dialogues}"""
+
+    @staticmethod
+    def _normalize_scene_payload(scene: dict | object) -> dict:
+        return scene if isinstance(scene, dict) else scene.model_dump()
+
+    @staticmethod
+    def _escape_ass_text(text: str) -> str:
+        return (
+            text.replace("{", r"\{")
+            .replace("}", r"\}")
+        )
+
+    def _wrap_caption_text_value(self, text: str) -> str:
+        words = [word.strip() for word in text.split() if word.strip()]
+        if not words:
+            return ""
+        return self._wrap_caption_text([{"word": word} for word in words])
+
+    def _build_scene_caption_dialogues(self, scene_timeline: list, duration: float) -> str:
+        if not scene_timeline:
+            return ""
+
+        lines: list[str] = []
+        normalized = sorted(
+            [self._normalize_scene_payload(scene) for scene in scene_timeline],
+            key=lambda scene: float(scene.get("start_time_seconds", 0)),
+        )
+        for idx, scene in enumerate(normalized):
+            caption_text = str(scene.get("caption_text") or "").strip()
+            if not caption_text:
+                continue
+
+            start_time = max(0.0, float(scene.get("start_time_seconds", 0)))
+            next_start = float(normalized[idx + 1].get("start_time_seconds", duration)) if idx + 1 < len(normalized) else duration
+            raw_end = scene.get("end_time_seconds")
+            end_time = float(raw_end) if raw_end is not None else next_start
+            end_time = min(max(end_time, start_time + 0.25), duration)
+            if idx + 1 < len(normalized):
+                end_time = min(end_time, max(next_start - 0.02, start_time + 0.25))
+            if end_time <= start_time:
+                end_time = min(start_time + 0.4, duration)
+
+            wrapped_text = self._wrap_caption_text_value(caption_text)
+            if not wrapped_text:
+                continue
+            wrapped_text = self._escape_ass_text(wrapped_text)
+
+            logger.info(
+                "Scene caption: "
+                f"text='{wrapped_text.replace(chr(92) + 'N', ' / ')}' start={start_time:.2f} end={end_time:.2f}"
+            )
+
+            lines.append(
+                f"Dialogue: 1,{self._secs_to_ts(start_time)},{self._secs_to_ts(end_time)},Caption,,0,0,0,,"
+                f"{{\\fad(60,90)}}{wrapped_text}"
+            )
+
+        return "\n".join(lines) + ("\n" if lines else "")
 
     def _build_caption_dialogues(self, word_timestamps: list[dict], duration: float) -> str:
         """Build caption dialogues using phrase-aware chunking and calmer caption styling."""
@@ -1095,6 +1163,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             word_text = self._wrap_caption_text(chunk)
             if not word_text:
                 continue
+            word_text = self._escape_ass_text(word_text)
 
             debug_text = word_text.replace("\\N", " / ")
             logger.info(
