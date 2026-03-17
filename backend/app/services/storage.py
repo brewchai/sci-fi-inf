@@ -64,6 +64,27 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to upload {filename}: {e}")
             raise
+
+    def upload_file(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Upload any file type to the configured storage bucket and return public URL."""
+        logger.info(f"Uploading generic file {filename} ({len(file_bytes)} bytes, {content_type})")
+        try:
+            self.client.storage.from_(self.BUCKET_NAME).upload(
+                path=filename,
+                file=file_bytes,
+                file_options={"content-type": content_type},
+            )
+            public_url = self.client.storage.from_(self.BUCKET_NAME).get_public_url(filename)
+            logger.info(f"Uploaded successfully: {public_url}")
+            return public_url
+        except Exception as e:
+            logger.error(f"Failed to upload {filename}: {e}")
+            raise
     
     def delete_audio(self, filename: str) -> bool:
         """
