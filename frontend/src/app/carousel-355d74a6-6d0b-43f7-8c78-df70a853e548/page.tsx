@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight, Film, Sparkles, Award, GripVertical, X, Layers, ChevronDown, ChevronRight } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, API_BASE_URL } from '@/lib/api';
+import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight, Film, Sparkles, Award, GripVertical, X, Layers, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, fetchLocalLibraryAssets, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, punctuateTranscript, uploadSceneAsset, resolveSceneCandidates, generateSceneAiFallbacks, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, SceneTimelineItem, API_BASE_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 const CTA_PRESETS = [
@@ -29,6 +29,7 @@ export default function CarouselGenerator() {
     const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
     const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
     const transitionTimelineRef = useRef<HTMLDivElement | null>(null);
+    const scenePromptDraftRef = useRef<Record<string, string>>({});
 
     const [episodesList, setEpisodesList] = useState<EpisodeDate[]>([]);
     const [selectedSlug, setSelectedSlug] = useState<string>('');
@@ -65,6 +66,18 @@ export default function CarouselGenerator() {
     const [reelVoice, setReelVoice] = useState('nova');
     const [searchQueries, setSearchQueries] = useState('');
     const [fetchingQueries, setFetchingQueries] = useState(false);
+    const [audioSourceMode, setAudioSourceMode] = useState<'tts' | 'upload'>('tts');
+    const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
+    const [uploadedTranscript, setUploadedTranscript] = useState('');
+    const [punctuatingTranscript, setPunctuatingTranscript] = useState(false);
+    const [sceneTimeline, setSceneTimeline] = useState<SceneTimelineItem[]>([]);
+    const [localLibraryAssets, setLocalLibraryAssets] = useState<SceneTimelineItem['stock_candidates']>([]);
+    const [loadingLocalLibraryAssets, setLoadingLocalLibraryAssets] = useState(false);
+    const [resolvingSceneCandidates, setResolvingSceneCandidates] = useState(false);
+    const [generatingSceneAi, setGeneratingSceneAi] = useState(false);
+    const [generatingPromptSceneId, setGeneratingPromptSceneId] = useState<string | null>(null);
+    const [maxAiGeneratedScenes, setMaxAiGeneratedScenes] = useState(3);
+    const [sceneFilter, setSceneFilter] = useState<'all' | 'unresolved' | 'ai-eligible'>('all');
 
     // Advanced Reel AI Visuals State
     const [anchorTimeline, setAnchorTimeline] = useState<TimelinePrompt[]>([]);
@@ -79,6 +92,7 @@ export default function CarouselGenerator() {
     const [anchorWords, setAnchorWords] = useState<AnchorWord[]>([]);
     const [generatingPrompts, setGeneratingPrompts] = useState(false);
     const [regeneratingImageIdx, setRegeneratingImageIdx] = useState<number | null>(null);
+    const [uploadingSceneAssetId, setUploadingSceneAssetId] = useState<string | null>(null);
     const [visualStyle, setVisualStyle] = useState('photojournalism');
     const [imageStyles, setImageStyles] = useState<ImageStyle[]>([]);
 
@@ -91,24 +105,50 @@ export default function CarouselGenerator() {
     }, []);
 
     // AI Image Generation Flow (Custom Tab)
-    const [aiImagePrompt, setAiImagePrompt] = useState('');
-    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
-    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-    const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+    const [carouselImagePrompts, setCarouselImagePrompts] = useState<string[]>([]);
+    const [carouselImageUrls, setCarouselImageUrls] = useState<string[]>([]);
+    const [generatingCarouselVisuals, setGeneratingCarouselVisuals] = useState(false);
+    const [carouselVisualProgress, setCarouselVisualProgress] = useState('');
+    const [regeneratingCarouselPromptIdx, setRegeneratingCarouselPromptIdx] = useState<number | null>(null);
+    const [generatingCarouselImageIdx, setGeneratingCarouselImageIdx] = useState<number | null>(null);
     const [fetchedClips, setFetchedClips] = useState<VisualClip[]>([]);
     const [approvedClips, setApprovedClips] = useState<VisualClip[]>([]);
     const [fetchingVisuals, setFetchingVisuals] = useState(false);
     const [reelSpeed, setReelSpeed] = useState(1.0);
-    const [elevenlabsStability, setElevenlabsStability] = useState(0.3);
-    const [elevenlabsSimilarityBoost, setElevenlabsSimilarityBoost] = useState(0.75);
-    const [elevenlabsStyle, setElevenlabsStyle] = useState(0.4);
+    const [elevenlabsStability, setElevenlabsStability] = useState(0.65);
+    const [elevenlabsSimilarityBoost, setElevenlabsSimilarityBoost] = useState(0.85);
+    const [elevenlabsStyle, setElevenlabsStyle] = useState(0.1);
     const [ttsProvider, setTtsProvider] = useState('openai');
-    const [includeWaveform, setIncludeWaveform] = useState(true);
+    const [includeWaveform, setIncludeWaveform] = useState(false);
 
     // Engine Tabs & Inputs
     type EngineTab = 'latest' | 'top-papers' | 'top-scientists' | 'daily-science' | 'custom';
     const [activeTab, setActiveTab] = useState<EngineTab>('latest');
     const isCustomTab = activeTab === 'custom';
+    const showReelSection =
+        isCustomTab ||
+        (activeTab === 'latest' && !!episode) ||
+        ((activeTab === 'top-papers' || activeTab === 'top-scientists' || activeTab === 'daily-science') && !!selectedPaperId);
+
+    const resetReelWorkspace = () => {
+        setReelUrl(null);
+        setReelError(null);
+        setReelScript('');
+        setReelHeadline('');
+        setAnchorTimeline([]);
+        setAnchorWords([]);
+        setSceneTimeline([]);
+        setGeneratedReelImages([]);
+        setWordTimestamps([]);
+        setAudioPreviewUrl(null);
+        setAudioPreviewDuration(0);
+        setAudioPreviewCurrentTime(0);
+        setUploadedAudioFile(null);
+        setUploadedTranscript('');
+        setAudioSourceMode('tts');
+        setDraggingTransitionIdx(null);
+        scenePromptDraftRef.current = {};
+    };
 
     useEffect(() => {
         if (!isCustomTab) return;
@@ -118,6 +158,32 @@ export default function CarouselGenerator() {
             setVisualStyle('archival_bw');
         }
     }, [isCustomTab, imageStyles, visualStyle]);
+
+    useEffect(() => {
+        if (!isCustomTab) return;
+        let cancelled = false;
+        const loadLocalLibraryAssets = async () => {
+            setLoadingLocalLibraryAssets(true);
+            try {
+                const result = await fetchLocalLibraryAssets(1200);
+                if (!cancelled) {
+                    setLocalLibraryAssets(result.assets || []);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setLocalLibraryAssets([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingLocalLibraryAssets(false);
+                }
+            }
+        };
+        loadLocalLibraryAssets();
+        return () => {
+            cancelled = true;
+        };
+    }, [isCustomTab]);
 
     // Custom tab state
     const [customCategory, setCustomCategory] = useState('SCIENCE');
@@ -141,10 +207,10 @@ export default function CarouselGenerator() {
 
     // Editable slide text (mirrors slideData, user can override)
     const [editedHeadline, setEditedHeadline] = useState('');
-    const [editedTakeaways, setEditedTakeaways] = useState<string[]>([]);
-    const [editedOutro, setEditedOutro] = useState('We highlight the most impactful research across every field.');
-    const [editedOutroFollow, setEditedOutroFollow] = useState('Follow @the.eureka.feed for more.');
-    const [showTag, setShowTag] = useState(true);
+    const [editedTakeaways, setEditedTakeaways] = useState<string[]>(['', '', '']);
+    const [editedOutro, setEditedOutro] = useState('Read the full paper in the description below.');
+    const [editedOutroFollow, setEditedOutroFollow] = useState('Follow @the.eureka.feed for research-backed explainers.');
+    const [showTag, setShowTag] = useState(false);
 
     // Collapsible section states
     const [isSlideSectionOpen, setIsSlideSectionOpen] = useState(true);
@@ -171,12 +237,41 @@ export default function CarouselGenerator() {
         audioPreviewDuration,
         reelDuration,
         wordTimestamps.length > 0 ? wordTimestamps[wordTimestamps.length - 1].end : 0,
-        anchorTimeline.length > 0 ? anchorTimeline[anchorTimeline.length - 1].start_time_seconds : 0
+        anchorTimeline.length > 0 ? anchorTimeline[anchorTimeline.length - 1].start_time_seconds : 0,
+        sceneTimeline.length > 0 ? sceneTimeline[sceneTimeline.length - 1].start_time_seconds : 0
     );
 
     const normaliseTimelineWord = (word: string) => word.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
+    const resolveAssetUrl = (url?: string | null) => {
+        if (!url) return '';
+        return url.startsWith('/') ? `${API_BASE_URL}${url}` : url;
+    };
+    const isVideoAssetType = (assetType?: string | null) => (assetType || '').endsWith('_video');
+    const describeCandidateType = (type: string) => {
+        if (type === 'local_video') return 'Library video';
+        if (type === 'local_image') return 'Library image';
+        if (type === 'stock_video') return 'Stock video';
+        return 'Stock image';
+    };
+    const buildCustomDeckTakeaways = () => editedTakeaways.map(item => item.trim()).filter(Boolean);
+    const buildCustomDeckSlides = () => {
+        const takeaways = buildCustomDeckTakeaways();
+        const ctaText = [editedOutro.trim(), editedOutroFollow.trim()].filter(Boolean).join(' ');
+        return [
+            { label: 'Slide 1', text: editedHeadline.trim() },
+            ...takeaways.map((text, idx) => ({ label: `Slide ${idx + 2}`, text })),
+            { label: `Slide ${takeaways.length + 2}`, text: ctaText.trim() },
+        ].filter(item => item.text);
+    };
+    const getSlideBackgroundUrl = (slideIndex: number) => {
+        if (!slideData) return '';
+        const slideImages = (slideData.imageUrls || []).filter(Boolean);
+        if (slideImages[slideIndex]) return resolveAssetUrl(slideImages[slideIndex]);
+        if (slideImages.length > 0) return resolveAssetUrl(slideImages[slideImages.length - 1]);
+        return resolveAssetUrl(slideData.imageUrl);
+    };
 
-    const clampTransitionTime = (items: TimelinePrompt[], idx: number, proposedTime: number) => {
+    const clampTransitionTime = (items: { start_time_seconds: number }[], idx: number, proposedTime: number) => {
         const previousBound = idx > 0 ? items[idx - 1].start_time_seconds + 0.05 : 0;
         const nextBound = idx < items.length - 1 ? items[idx + 1].start_time_seconds - 0.05 : timelineDuration;
         if (nextBound <= previousBound) return previousBound;
@@ -198,6 +293,46 @@ export default function CarouselGenerator() {
     };
 
     const updateTransitionFromTime = (idx: number, rawTime: number) => {
+        if (isCustomTab && sceneTimeline.length > 0) {
+            let snappedWordForSync: WordTimestamp | null = null;
+            let snappedTimeForSync = rawTime;
+            setSceneTimeline(prev => {
+                if (idx < 0 || idx >= prev.length) return prev;
+                const next = [...prev];
+                const clampedTime = clampTransitionTime(next, idx, rawTime);
+                let snappedTime = clampedTime;
+                let snappedWord: WordTimestamp | null = null;
+
+                if (wordTimestamps.length > 0) {
+                    const previousBound = idx > 0 ? next[idx - 1].start_time_seconds + 0.05 : 0;
+                    const nextBound = idx < next.length - 1 ? next[idx + 1].start_time_seconds - 0.05 : timelineDuration;
+                    const candidates = wordTimestamps.filter(w => w.start >= previousBound && w.start <= nextBound);
+                    const pool = candidates.length > 0 ? candidates : wordTimestamps;
+                    snappedWord = pool.reduce((best, current) => {
+                        return Math.abs(current.start - clampedTime) < Math.abs(best.start - clampedTime) ? current : best;
+                    }, pool[0]);
+                    snappedTime = clampTransitionTime(next, idx, snappedWord.start);
+                }
+
+                next[idx] = {
+                    ...next[idx],
+                    start_time_seconds: snappedTime,
+                    anchor_word: snappedWord ? normaliseTimelineWord(snappedWord.word) || next[idx].anchor_word : next[idx].anchor_word,
+                };
+                if (idx > 0) {
+                    next[idx - 1] = { ...next[idx - 1], end_time_seconds: snappedTime };
+                }
+                if (idx < next.length - 1) {
+                    next[idx] = { ...next[idx], end_time_seconds: next[idx + 1].start_time_seconds };
+                }
+                snappedWordForSync = snappedWord;
+                snappedTimeForSync = snappedTime;
+                return next;
+            });
+            syncAnchorWordAtIndex(idx, snappedWordForSync, snappedTimeForSync);
+            return;
+        }
+
         let snappedWordForSync: WordTimestamp | null = null;
         let snappedTimeForSync = rawTime;
 
@@ -242,6 +377,190 @@ export default function CarouselGenerator() {
         updateTransitionFromTime(idx, relativeTime);
     };
 
+    const filteredScenes = sceneTimeline.filter((scene, idx) => {
+        if (sceneFilter === 'unresolved') return scene.asset_source === 'none';
+        if (sceneFilter === 'ai-eligible') return scene.scene_state === 'ai_eligible' || (!!scene.ai_prompt && !scene.ai_image_url);
+        return true;
+    });
+
+    useEffect(() => {
+        // Keep a live prompt map so per-scene generation always uses the latest edited text.
+        const nextDrafts: Record<string, string> = { ...scenePromptDraftRef.current };
+        for (const scene of sceneTimeline) {
+            nextDrafts[scene.scene_id] = scene.ai_prompt || "";
+        }
+        scenePromptDraftRef.current = nextDrafts;
+    }, [sceneTimeline]);
+
+    const reindexScenes = (scenes: SceneTimelineItem[]) => {
+        if (scenes.length === 0) return scenes;
+        return scenes
+            .slice()
+            .sort((a, b) => a.start_time_seconds - b.start_time_seconds)
+            .map((scene, idx, arr) => {
+                const nextStart = arr[idx + 1]?.start_time_seconds;
+                const endTime = nextStart !== undefined
+                    ? Math.max(nextStart, scene.start_time_seconds + 0.01)
+                    : Math.max(scene.end_time_seconds || 0, scene.start_time_seconds + 0.5);
+                return {
+                    ...scene,
+                    scene_id: `scene-${idx + 1}`,
+                    end_time_seconds: endTime,
+                };
+            });
+    };
+
+    const syncAnchorWordsFromScenes = (scenes: SceneTimelineItem[]) => {
+        setAnchorWords(scenes.map(scene => ({
+            word: scene.anchor_word,
+            start_time_seconds: scene.start_time_seconds,
+            end_time_seconds: scene.end_time_seconds,
+        })));
+    };
+
+    const deleteScene = (sceneId: string) => {
+        setSceneTimeline(prev => {
+            if (prev.length <= 1) return prev;
+            const next = reindexScenes(prev.filter(scene => scene.scene_id !== sceneId));
+            syncAnchorWordsFromScenes(next);
+            return next;
+        });
+    };
+
+    const addSceneAfter = (sceneId: string) => {
+        setSceneTimeline(prev => {
+            const idx = prev.findIndex(scene => scene.scene_id === sceneId);
+            if (idx === -1) return prev;
+            const current = prev[idx];
+            const nextScene = prev[idx + 1];
+            const nextBoundary = nextScene?.start_time_seconds ?? Math.max(timelineDuration, current.start_time_seconds + 1.5);
+            const targetTime = current.start_time_seconds + Math.max((nextBoundary - current.start_time_seconds) / 2, 0.2);
+
+            let anchorWord = "New scene";
+            let startTime = targetTime;
+            let endTime = Math.min(targetTime + 1.0, nextBoundary);
+            let transcriptExcerpt = "New scene";
+            if (wordTimestamps.length > 0) {
+                const closest = wordTimestamps.reduce((best, item) => (
+                    Math.abs(item.start - targetTime) < Math.abs(best.start - targetTime) ? item : best
+                ), wordTimestamps[0]);
+                anchorWord = closest.word;
+                startTime = closest.start;
+                endTime = closest.end;
+                transcriptExcerpt = closest.word;
+            }
+
+            const insertion: SceneTimelineItem = {
+                scene_id: "scene-new",
+                anchor_word: anchorWord,
+                visual_focus_word: anchorWord,
+                anchor_phrase: transcriptExcerpt,
+                start_time_seconds: startTime,
+                end_time_seconds: endTime,
+                transcript_excerpt: transcriptExcerpt,
+                effect_transition_name: current.effect_transition_name,
+                search_queries: [],
+                stock_candidates: [],
+                selected_asset: null,
+                ai_prompt: "",
+                ai_image_url: null,
+                last_generated_ai_prompt: null,
+                asset_source: "none",
+                scene_state: "unresolved",
+            };
+
+            const next = [...prev];
+            next.splice(idx + 1, 0, insertion);
+            const reindexed = reindexScenes(next);
+            syncAnchorWordsFromScenes(reindexed);
+            return reindexed;
+        });
+    };
+
+    const addSceneAtTime = (requestedTime: number) => {
+        setSceneTimeline(prev => {
+            if (prev.length === 0) return prev;
+            const sorted = [...prev].sort((a, b) => a.start_time_seconds - b.start_time_seconds);
+            const maxTimeline = timelineDuration > 0
+                ? timelineDuration
+                : Math.max(sorted[sorted.length - 1].end_time_seconds || 0, requestedTime + 0.5);
+            const clampedRequest = Math.min(Math.max(requestedTime, 0), maxTimeline);
+
+            let insertIdx = sorted.findIndex(scene => scene.start_time_seconds > clampedRequest);
+            if (insertIdx === -1) insertIdx = sorted.length;
+            const previousScene = sorted[insertIdx - 1];
+            const nextScene = sorted[insertIdx];
+            const minBound = previousScene ? previousScene.start_time_seconds + 0.05 : 0;
+            const maxBound = nextScene ? nextScene.start_time_seconds - 0.05 : maxTimeline;
+
+            const targetTime = maxBound <= minBound
+                ? minBound
+                : Math.min(Math.max(clampedRequest, minBound), maxBound);
+
+            let anchorWord = "New scene";
+            let startTime = targetTime;
+            let endTime = Math.min(targetTime + 1.0, maxBound > targetTime ? maxBound : targetTime + 1.0);
+            let transcriptExcerpt = "New scene";
+            if (wordTimestamps.length > 0) {
+                const closest = wordTimestamps.reduce((best, item) => (
+                    Math.abs(item.start - targetTime) < Math.abs(best.start - targetTime) ? item : best
+                ), wordTimestamps[0]);
+                anchorWord = closest.word;
+                startTime = closest.start;
+                endTime = closest.end;
+                transcriptExcerpt = closest.word;
+            }
+
+            const insertion: SceneTimelineItem = {
+                scene_id: "scene-new",
+                anchor_word: anchorWord,
+                visual_focus_word: anchorWord,
+                anchor_phrase: transcriptExcerpt,
+                start_time_seconds: startTime,
+                end_time_seconds: endTime,
+                transcript_excerpt: transcriptExcerpt,
+                effect_transition_name: previousScene?.effect_transition_name || nextScene?.effect_transition_name,
+                search_queries: [],
+                stock_candidates: [],
+                selected_asset: null,
+                ai_prompt: "",
+                ai_image_url: null,
+                last_generated_ai_prompt: null,
+                asset_source: "none",
+                scene_state: "unresolved",
+            };
+
+            const next = [...sorted];
+            next.splice(insertIdx, 0, insertion);
+            const reindexed = reindexScenes(next);
+            syncAnchorWordsFromScenes(reindexed);
+            return reindexed;
+        });
+    };
+
+    const handleSceneAssetUpload = async (sceneId: string, file: File | null) => {
+        if (!file) return;
+        setUploadingSceneAssetId(sceneId);
+        try {
+            const uploaded = await uploadSceneAsset(file);
+            setSceneTimeline(prev => prev.map(item => item.scene_id === sceneId ? {
+                ...item,
+                selected_asset: {
+                    asset_source: uploaded.asset_source,
+                    asset_url: uploaded.asset_url,
+                    thumbnail_url: uploaded.thumbnail_url || uploaded.asset_url,
+                    candidate_id: null,
+                },
+                asset_source: uploaded.asset_source,
+                scene_state: 'resolved_by_user',
+            } : item));
+        } catch (err: any) {
+            alert(err?.message || 'Failed to upload scene asset');
+        } finally {
+            setUploadingSceneAssetId(null);
+        }
+    };
+
     useEffect(() => {
         if (draggingTransitionIdx === null) return;
 
@@ -260,7 +579,7 @@ export default function CarouselGenerator() {
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [draggingTransitionIdx, timelineDuration, wordTimestamps, anchorTimeline]);
+    }, [draggingTransitionIdx, timelineDuration, wordTimestamps, anchorTimeline, sceneTimeline, isCustomTab]);
 
     // When episode changes, fetch papers
     useEffect(() => {
@@ -420,38 +739,140 @@ export default function CarouselGenerator() {
     };
 
     // AI Image Generation Handlers
-    const handleGenerateImagePrompt = async () => {
-        // Collect text from headline and slide 2 (takeaway 1) for context
-        const contextText = `${editedHeadline} ${editedTakeaways[0] || ''}`;
-        if (!contextText.trim()) return;
+    const ensureNoHumansConstraint = (prompt: string) => {
+        const normalized = prompt.toLowerCase();
+        if (
+            normalized.includes("no humans") ||
+            normalized.includes("no people") ||
+            normalized.includes("without humans")
+        ) {
+            return prompt;
+        }
+        return `${prompt.trim()}. Absolutely no humans, no people, no faces, no body parts.`;
+    };
 
-        setIsGeneratingPrompt(true);
+    const buildSlidePromptInput = (
+        storyContext: string,
+        slideLabel: string,
+        slideText: string
+    ) => (
+        `Write one image-generation prompt for ${slideLabel} of this carousel.\n\n` +
+        `Full story context (for narrative relevance):\n${storyContext}\n\n` +
+        `Current slide text:\n${slideText}\n\n` +
+        `Rules:\n` +
+        `- photorealistic, cinematic, high-retention composition\n` +
+        `- no text, logos, or letters in the image\n` +
+        `- no humans, no faces, no body parts, no crowds\n` +
+        `- you may reuse the same visual concept as other slides; do not force visual diversity.`
+    );
+
+    const handleRegenerateCarouselPrompt = async (idx: number) => {
+        const deckSlides = buildCustomDeckSlides();
+        const slide = deckSlides[idx];
+        if (!slide) return;
+
+        setRegeneratingCarouselPromptIdx(idx);
         try {
-            const { prompt } = await generateImagePrompt(contextText);
-            setAiImagePrompt(prompt);
+            const storyContext = deckSlides.map((item, orderIdx) => `${orderIdx + 1}. ${item.text}`).join('\n');
+            const { prompt } = await generateImagePrompt(
+                buildSlidePromptInput(storyContext, slide.label, slide.text)
+            );
+            const constrainedPrompt = ensureNoHumansConstraint(prompt);
+            setCarouselImagePrompts(prev => {
+                const next = [...prev];
+                while (next.length <= idx) next.push('');
+                next[idx] = constrainedPrompt;
+                return next;
+            });
+            setCarouselImageUrls(prev => {
+                const next = [...prev];
+                while (next.length <= idx) next.push('');
+                next[idx] = '';
+                return next;
+            });
+            setCarouselVisualProgress(`Prompt refreshed for slide ${idx + 1}.`);
         } catch (err) {
-            console.error('Error generating image prompt', err);
-            alert('Failed to generate prompt');
+            console.error('Error regenerating carousel prompt', err);
+            setError(`Failed to regenerate prompt for slide ${idx + 1}.`);
         } finally {
-            setIsGeneratingPrompt(false);
+            setRegeneratingCarouselPromptIdx(null);
         }
     };
 
-    const handleGenerateImage = async () => {
-        if (!aiImagePrompt.trim()) return;
+    const handleGenerateCarouselPrompts = async () => {
+        const deckSlides = buildCustomDeckSlides();
+        if (!deckSlides.length) {
+            setError('Add story text first before generating prompts.');
+            return;
+        }
 
-        setIsGeneratingImage(true);
+        setGeneratingCarouselVisuals(true);
+        setCarouselVisualProgress('Generating prompts...');
+        setError(null);
+
         try {
-            const { image_url } = await generateImage(aiImagePrompt);
-            // Prefix with backend host if needed, but our API returns /static/...
-            // Since we're on localhost:3000 and backend is 8000
-            const fullUrl = `http://localhost:8000${image_url}`;
-            setGeneratedImageUrl(fullUrl);
+            const storyContext = deckSlides.map((slide, idx) => `${idx + 1}. ${slide.text}`).join('\n');
+            const nextPrompts: string[] = [];
+            const maxSlides = Math.min(deckSlides.length, 5);
+
+            for (let idx = 0; idx < maxSlides; idx += 1) {
+                const slide = deckSlides[idx];
+                setCarouselVisualProgress(`Generating prompt ${idx + 1}/${maxSlides}...`);
+                const { prompt } = await generateImagePrompt(
+                    buildSlidePromptInput(storyContext, slide.label, slide.text)
+                );
+                nextPrompts.push(ensureNoHumansConstraint(prompt));
+            }
+
+            setCarouselImagePrompts(nextPrompts);
+            setCarouselImageUrls(prev => nextPrompts.map((_, idx) => prev[idx] || ''));
+            setCarouselVisualProgress(`Generated ${nextPrompts.length} prompts. Generate images per slide.`);
         } catch (err) {
-            console.error('Error generating image', err);
-            alert('Failed to generate image. Did you add TOGETHER_API_KEYS?');
+            console.error('Error generating carousel prompts', err);
+            setError('Failed to generate prompts. Check API keys and retry.');
         } finally {
-            setIsGeneratingImage(false);
+            setGeneratingCarouselVisuals(false);
+        }
+    };
+
+    const handleGenerateCarouselImage = async (idx: number) => {
+        const prompt = ensureNoHumansConstraint((carouselImagePrompts[idx] || '').trim());
+        if (!prompt) return;
+
+        setGeneratingCarouselImageIdx(idx);
+        try {
+            const { image_url } = await generateImage(prompt);
+            const resolved = resolveAssetUrl(image_url);
+            setCarouselImagePrompts(prev => {
+                const next = [...prev];
+                while (next.length <= idx) next.push('');
+                next[idx] = prompt;
+                return next;
+            });
+            setCarouselImageUrls(prev => {
+                const next = [...prev];
+                while (next.length <= idx) next.push('');
+                next[idx] = resolved;
+                return next;
+            });
+            if (customSlidesReady) {
+                setSlideData(prev => {
+                    if (!prev) return prev;
+                    const nextImages = [...(prev.imageUrls || [])];
+                    while (nextImages.length <= idx) nextImages.push('');
+                    nextImages[idx] = resolved;
+                    return {
+                        ...prev,
+                        imageUrl: nextImages[0] || prev.imageUrl,
+                        imageUrls: nextImages,
+                    };
+                });
+            }
+        } catch (err) {
+            console.error('Error generating carousel image', err);
+            setError(`Failed to generate image for slide ${idx + 1}.`);
+        } finally {
+            setGeneratingCarouselImageIdx(null);
         }
     };
 
@@ -520,35 +941,27 @@ export default function CarouselGenerator() {
                 clone.style.backgroundColor = '#0a0a0f'; // Dark slide base
                 clone.style.color = '#ffffff';
 
-                // Preload background image as base64 to bypass html2canvas CORS/taint issues
-                if (slideData?.imageUrl) {
-                    try {
-                        const bgDiv = clone.querySelector(`.${styles.slideBackground}`) as HTMLElement;
-                        if (bgDiv) {
-                            const oldBg = bgDiv.style.backgroundImage || window.getComputedStyle(bgDiv).backgroundImage;
-
-                            const res = await fetch(slideData.imageUrl);
+                // Preload each slide's background image as base64 to bypass html2canvas CORS/taint issues.
+                try {
+                    const bgDiv = clone.querySelector(`.${styles.slideBackground}`) as HTMLElement;
+                    if (bgDiv) {
+                        const oldBg = bgDiv.style.backgroundImage || window.getComputedStyle(bgDiv).backgroundImage;
+                        const bgMatch = oldBg.match(/url\((['"]?)(.*?)\1\)/);
+                        if (bgMatch?.[2]) {
+                            const bgUrl = resolveAssetUrl(bgMatch[2]);
+                            const res = await fetch(bgUrl);
                             const blob = await res.blob();
                             const base64 = await new Promise<string>((resolve) => {
                                 const reader = new FileReader();
                                 reader.onloadend = () => resolve(reader.result as string);
                                 reader.readAsDataURL(blob);
                             });
-
-                            // Re-apply original background but swap the url() part
-                            if (oldBg && oldBg !== 'none') {
-                                // Find any url(...) and replace its contents with the base64 string
-                                const newBg = oldBg.replace(/url\([^)]+\)/g, `url(${base64})`);
-                                bgDiv.style.backgroundImage = newBg;
-                            } else {
-                                // Fallback if no existing gradient
-                                bgDiv.style.backgroundImage = `url(${base64})`;
-                            }
+                            bgDiv.style.backgroundImage = oldBg.replace(/url\([^)]+\)/, `url(${base64})`);
                             bgDiv.style.opacity = '1';
                         }
-                    } catch (e) {
-                        console.error('Failed to preload background image for canvas', e);
                     }
+                } catch (e) {
+                    console.error('Failed to preload background image for canvas', e);
                 }
 
                 cloneContainer.appendChild(clone);
@@ -658,18 +1071,27 @@ export default function CarouselGenerator() {
                         className={activeTab === tab ? styles.tabActive : styles.tab}
                         onClick={() => {
                             if (activeTab === tab) return;
+                            resetReelWorkspace();
                             setActiveTab(tab);
                             setPapers([]);
                             setSelectedPaperId(null);
                             setSlideData(null);
+                            if (tab !== 'latest') {
+                                setEpisode(null);
+                            }
                             setImpactAnalysis(null);
-                            setReelUrl(null);
-                            setReelScript('');
-                            setReelHeadline('');
                             setSlideTitle('');
                             setEditedHeadline('');
-                            setEditedTakeaways([]);
+                            setEditedTakeaways(['', '', '']);
+                            setEditedOutro('Read the full paper in the description below.');
+                            setEditedOutroFollow('Follow @the.eureka.feed for research-backed explainers.');
+                            setShowTag(false);
                             setCustomCaption('');
+                            setCarouselImagePrompts([]);
+                            setCarouselImageUrls([]);
+                            setCarouselVisualProgress('');
+                            setRegeneratingCarouselPromptIdx(null);
+                            setGeneratingCarouselImageIdx(null);
                             setCustomSlidesReady(false);
                             setCustomYear('');
                             setCustomCategory('SCIENCE');
@@ -896,53 +1318,49 @@ export default function CarouselGenerator() {
                                     style={{ width: '100%' }}
                                 />
                             </div>
-                            <div className={styles.filterGroup} style={{ width: '100%' }}>
-                                <label>Slide 2</label>
-                                <textarea
-                                    className={styles.engineInput}
-                                    placeholder="Text for slide 2..."
-                                    value={editedTakeaways[0] || ''}
-                                    onChange={(e) => {
-                                        const t = [...editedTakeaways];
-                                        t[0] = e.target.value;
-                                        setEditedTakeaways(t.length ? t : [e.target.value]);
-                                    }}
-                                    rows={3}
-                                    style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                                />
-                            </div>
-                            <div className={styles.filterGroup} style={{ width: '100%' }}>
-                                <label>Slide 3</label>
-                                <textarea
-                                    className={styles.engineInput}
-                                    placeholder="Text for slide 3..."
-                                    value={editedTakeaways[1] || ''}
-                                    onChange={(e) => {
-                                        const t = [...editedTakeaways];
-                                        while (t.length < 2) t.push('');
-                                        t[1] = e.target.value;
-                                        setEditedTakeaways(t);
-                                    }}
-                                    rows={3}
-                                    style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                                />
-                            </div>
-                            <div className={styles.filterGroup} style={{ width: '100%' }}>
-                                <label>Slide 4</label>
-                                <textarea
-                                    className={styles.engineInput}
-                                    placeholder="Text for slide 4..."
-                                    value={editedTakeaways[2] || ''}
-                                    onChange={(e) => {
-                                        const t = [...editedTakeaways];
-                                        while (t.length < 3) t.push('');
-                                        t[2] = e.target.value;
-                                        setEditedTakeaways(t);
-                                    }}
-                                    rows={3}
-                                    style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                                />
-                            </div>
+                            {editedTakeaways.map((slideText, idx) => (
+                                <div className={styles.filterGroup} style={{ width: '100%' }} key={`custom-input-slide-${idx}`}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.45rem' }}>
+                                        <label style={{ margin: 0 }}>Slide {idx + 2}</label>
+                                        {editedTakeaways.length > 1 && (
+                                            <button
+                                                type="button"
+                                                className={styles.engineButtonSecondary}
+                                                onClick={() => {
+                                                    setEditedTakeaways(prev => prev.filter((_, takeIdx) => takeIdx !== idx));
+                                                    setCarouselImagePrompts(prev => prev.filter((_, imageIdx) => imageIdx !== idx + 1));
+                                                    setCarouselImageUrls(prev => prev.filter((_, imageIdx) => imageIdx !== idx + 1));
+                                                }}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.55rem' }}
+                                            >
+                                                <Trash2 size={14} />
+                                                Delete
+                                            </button>
+                                        )}
+                                    </div>
+                                    <textarea
+                                        className={styles.engineInput}
+                                        placeholder={`Text for slide ${idx + 2}...`}
+                                        value={slideText}
+                                        onChange={(e) => {
+                                            const next = [...editedTakeaways];
+                                            next[idx] = e.target.value;
+                                            setEditedTakeaways(next);
+                                        }}
+                                        rows={3}
+                                        style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                                    />
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                className={styles.engineButtonSecondary}
+                                onClick={() => setEditedTakeaways(prev => [...prev, ''])}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', width: 'fit-content' }}
+                            >
+                                <Plus size={16} />
+                                Add Slide
+                            </button>
                             <div className={styles.filterGroup} style={{ width: '100%' }}>
                                 <label>Instagram Caption</label>
                                 <textarea
@@ -968,69 +1386,78 @@ export default function CarouselGenerator() {
                                 flexDirection: 'column',
                                 gap: '1rem'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: aiImagePrompt ? '1rem' : '0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                     <h3 style={{ margin: 0, fontSize: '1rem', color: '#64ffda', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
-                                        <Sparkles size={18} /> AI Slide Visuals (Optional)
+                                        <Sparkles size={18} /> AI Slide Visual Set (Top 5)
                                     </h3>
-                                    {!aiImagePrompt && (
-                                        <button
-                                            className={styles.engineButtonSmall}
-                                            onClick={handleGenerateImagePrompt}
-                                            disabled={isGeneratingPrompt || !editedHeadline}
-                                        >
-                                            {isGeneratingPrompt ? <Loader2 size={14} className={styles.spinAnimation} /> : <FileText size={14} />}
-                                            Auto-Draft AI Prompt
-                                        </button>
-                                    )}
+                                    <button
+                                        className={styles.engineButtonSmall}
+                                        onClick={handleGenerateCarouselPrompts}
+                                        disabled={generatingCarouselVisuals || !editedHeadline.trim()}
+                                    >
+                                        {generatingCarouselVisuals ? <Loader2 size={14} className={styles.spinAnimation} /> : <FileText size={14} />}
+                                        Generate 5 Prompts
+                                    </button>
                                 </div>
 
-                                {aiImagePrompt && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ fontSize: '0.75rem', opacity: 0.7 }}>Visual Prompt (LLM Optimized)</label>
-                                        <textarea
-                                            className={styles.engineInput}
-                                            value={aiImagePrompt}
-                                            onChange={(e) => setAiImagePrompt(e.target.value)}
-                                            rows={2}
-                                            style={{ width: '100%', fontSize: '0.85rem' }}
-                                        />
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                            <button
-                                                className={styles.engineButton}
-                                                onClick={handleGenerateImage}
-                                                disabled={isGeneratingImage || !aiImagePrompt}
-                                                style={{ flex: 1 }}
-                                            >
-                                                {isGeneratingImage ? <Loader2 size={16} className={styles.spinAnimation} /> : <Film size={16} />}
-                                                Generate 1024x1024 Visual
-                                            </button>
-                                            <button
-                                                className={styles.engineButtonSecondary}
-                                                onClick={() => { setAiImagePrompt(''); setGeneratedImageUrl(null); }}
-                                                style={{ padding: '0.5rem' }}
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
+                                {carouselVisualProgress && (
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                        {carouselVisualProgress}
+                                    </p>
                                 )}
 
-                                {generatedImageUrl && (
-                                    <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-                                        <p style={{ fontSize: '0.75rem', marginBottom: '0.5rem', color: '#64ffda' }}>✓ Image Ready!</p>
-                                        <div style={{
-                                            width: '100%',
-                                            aspectRatio: '1/1',
-                                            borderRadius: '8px',
-                                            overflow: 'hidden',
-                                            border: '1px solid rgba(100, 255, 218, 0.3)',
-                                            marginBottom: '0.8rem'
-                                        }}>
-                                            <img src={generatedImageUrl} alt="AI Generated" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        </div>
-                                        <p style={{ fontSize: '0.7rem', opacity: 0.6, fontStyle: 'italic' }}>
-                                            This image will be applied as the background for your generated slides.
-                                        </p>
+                                {carouselImagePrompts.length > 0 && (
+                                    <div style={{ display: 'grid', gap: '0.85rem' }}>
+                                        {carouselImagePrompts.map((prompt, idx) => (
+                                            <div key={`carousel-visual-${idx}`} style={{ border: '1px solid rgba(100, 255, 218, 0.22)', borderRadius: '10px', padding: '0.75rem', background: 'rgba(10, 10, 15, 0.5)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                                                    <label style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 600, margin: 0 }}>Slide {idx + 1} prompt</label>
+                                                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                                        <button
+                                                            type="button"
+                                                            className={styles.engineButtonSmall}
+                                                            onClick={() => handleRegenerateCarouselPrompt(idx)}
+                                                            disabled={regeneratingCarouselPromptIdx === idx}
+                                                        >
+                                                            {regeneratingCarouselPromptIdx === idx ? <Loader2 size={12} className={styles.spinAnimation} /> : <RefreshCw size={12} />}
+                                                            Regenerate prompt
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className={styles.engineButtonSmall}
+                                                            onClick={() => handleGenerateCarouselImage(idx)}
+                                                            disabled={generatingCarouselImageIdx === idx || !prompt.trim()}
+                                                        >
+                                                            {generatingCarouselImageIdx === idx ? <Loader2 size={12} className={styles.spinAnimation} /> : <Film size={12} />}
+                                                            {carouselImageUrls[idx] ? 'Regenerate image' : 'Generate image'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <textarea
+                                                    className={styles.engineInput}
+                                                    value={prompt}
+                                                    onChange={(e) => {
+                                                        const next = [...carouselImagePrompts];
+                                                        next[idx] = e.target.value;
+                                                        setCarouselImagePrompts(next);
+                                                    }}
+                                                    rows={3}
+                                                    style={{ width: '100%', fontSize: '0.83rem' }}
+                                                />
+                                                <p style={{ margin: '0.5rem 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                    Human subjects are blocked for this visual set.
+                                                </p>
+                                                {carouselImageUrls[idx] && (
+                                                    <div style={{ marginTop: '0.6rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(100, 255, 218, 0.24)', maxWidth: '220px' }}>
+                                                        <img
+                                                            src={carouselImageUrls[idx]}
+                                                            alt={`Slide ${idx + 1} visual`}
+                                                            style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -1039,18 +1466,22 @@ export default function CarouselGenerator() {
                                 className={styles.engineButton}
                                 style={{ width: '100%', padding: '1.2rem', fontSize: '1.1rem', display: 'flex', justifyContent: 'center' }}
                                 onClick={() => {
-                                    const takeaways = editedTakeaways.filter(t => t.trim());
+                                    const takeaways = buildCustomDeckTakeaways();
                                     if (!editedHeadline.trim() || takeaways.length === 0) {
                                         setError('Provide at least a headline and one slide text.');
                                         return;
                                     }
+                                    const slideCount = takeaways.length + 2;
+                                    const appliedImageUrls = carouselImageUrls.slice(0, slideCount).filter(Boolean);
+                                    setEditedTakeaways(takeaways);
                                     setSlideData({
                                         paper_id: 0,
                                         category: customCategory || 'SCIENCE',
-                                        headline: editedHeadline,
+                                        headline: editedHeadline.trim(),
                                         takeaways: takeaways,
                                         caption: customCaption,
-                                        imageUrl: generatedImageUrl || undefined
+                                        imageUrl: appliedImageUrls[0] || undefined,
+                                        imageUrls: appliedImageUrls.length ? appliedImageUrls : undefined,
                                     });
                                     setCustomSlidesReady(true);
                                     setError(null);
@@ -1059,6 +1490,53 @@ export default function CarouselGenerator() {
                             >
                                 <Sparkles size={20} /> Generate & Review Slides
                             </button>
+
+                            {customSlidesReady && slideData && (
+                                <div style={{
+                                    marginTop: '1.25rem',
+                                    padding: '1.25rem',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--bg-primary)',
+                                    display: 'grid',
+                                    gap: '1rem'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Generated Story Deck</h3>
+                                            <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                Slides stay in Story Deck now. Review them here before moving into reel generation.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomSlidesReady(false)}
+                                            style={{
+                                                padding: '0.55rem 0.85rem',
+                                                borderRadius: '8px',
+                                                border: '1px solid var(--border)',
+                                                background: 'transparent',
+                                                color: 'var(--text-secondary)',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            Hide review
+                                        </button>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+                                        {[slideData.headline, ...slideData.takeaways, `${editedOutro}\n${editedOutroFollow}`.trim()].map((text, idx) => (
+                                            <div key={idx} style={{ border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--bg-secondary)', padding: '1rem', minHeight: '180px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em' }}>
+                                                    {idx === 0 ? 'SLIDE 1' : idx <= slideData.takeaways.length ? `SLIDE ${idx + 1}` : 'FINAL CTA'}
+                                                </div>
+                                                <div style={{ fontSize: idx === 0 ? '1.15rem' : '0.95rem', fontWeight: idx === 0 ? 700 : 500, lineHeight: 1.45, color: 'var(--text-primary)' }}>
+                                                    {text}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1195,7 +1673,7 @@ export default function CarouselGenerator() {
             )}
 
             {/* Slide Rendering */}
-            {((selectedPaperId && slideData && !loadingSlide) || (activeTab === 'custom' && customSlidesReady)) && (
+            {((selectedPaperId && slideData && !loadingSlide) || (activeTab === 'custom' && customSlidesReady && slideData)) && (
                 <div style={{
                     padding: '2rem',
                     background: 'var(--bg-secondary)',
@@ -1288,8 +1766,8 @@ export default function CarouselGenerator() {
                                         >
                                             <div
                                                 className={styles.slideBackground}
-                                                style={slideData?.imageUrl ? {
-                                                    backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.1) 0%, rgba(10, 10, 15, 0.8) 70%, rgba(10, 10, 15, 0.95) 100%), url(${slideData.imageUrl})`,
+                                                style={getSlideBackgroundUrl(0) ? {
+                                                    backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.1) 0%, rgba(10, 10, 15, 0.8) 70%, rgba(10, 10, 15, 0.95) 100%), url(${getSlideBackgroundUrl(0)})`,
                                                     backgroundSize: 'cover',
                                                     backgroundPosition: 'center',
                                                 } : {}}
@@ -1297,7 +1775,6 @@ export default function CarouselGenerator() {
                                             <div className={styles.slideContent} style={{ justifyContent: 'center' }}>
                                                 <div className={styles.slideHeader}>
                                                     <div className={styles.brandName}>The Eureka Feed</div>
-                                                    <div className={styles.slideCount}>1 / {editedTakeaways.length + 2}</div>
                                                 </div>
 
                                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
@@ -1423,8 +1900,8 @@ export default function CarouselGenerator() {
                                                 >
                                                     <div
                                                         className={styles.slideBackground}
-                                                        style={slideData?.imageUrl ? {
-                                                            backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.3) 0%, rgba(10, 10, 15, 0.8) 60%, rgba(10, 10, 15, 0.95) 100%), url(${slideData.imageUrl})`,
+                                                        style={getSlideBackgroundUrl(idx + 1) ? {
+                                                            backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.3) 0%, rgba(10, 10, 15, 0.8) 60%, rgba(10, 10, 15, 0.95) 100%), url(${getSlideBackgroundUrl(idx + 1)})`,
                                                             backgroundSize: 'cover',
                                                             backgroundPosition: 'center',
                                                         } : {}}
@@ -1432,7 +1909,6 @@ export default function CarouselGenerator() {
                                                     <div className={styles.slideContent}>
                                                         <div className={styles.slideHeader}>
                                                             <div className={styles.brandName}>The Eureka Feed</div>
-                                                            <div className={styles.slideCount}>{idx + 2} / {editedTakeaways.length + 2}</div>
                                                         </div>
 
                                                         <div className={styles.standaloneTakeawayWrapper}>
@@ -1492,8 +1968,8 @@ export default function CarouselGenerator() {
                                         >
                                             <div
                                                 className={styles.slideBackground}
-                                                style={slideData?.imageUrl ? {
-                                                    backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.1) 0%, rgba(10, 10, 15, 0.8) 70%, rgba(10, 10, 15, 0.95) 100%), url(${slideData.imageUrl})`,
+                                                style={getSlideBackgroundUrl(editedTakeaways.length + 1) ? {
+                                                    backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 15, 0.1) 0%, rgba(10, 10, 15, 0.8) 70%, rgba(10, 10, 15, 0.95) 100%), url(${getSlideBackgroundUrl(editedTakeaways.length + 1)})`,
                                                     backgroundSize: 'cover',
                                                     backgroundPosition: 'center',
                                                 } : {}}
@@ -1501,19 +1977,21 @@ export default function CarouselGenerator() {
                                             <div className={styles.slideContent}>
                                                 <div className={styles.slideHeader}>
                                                     <div className={styles.brandName}>The Eureka Feed</div>
-                                                    <div className={styles.slideCount}>{editedTakeaways.length + 2} / {editedTakeaways.length + 2}</div>
                                                 </div>
 
-                                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '20px', textAlign: 'center', gap: '40px' }}>
-                                                    <div style={{ fontSize: '3.5rem', fontWeight: 600, color: '#ffffff', lineHeight: 1.3 }}>
-                                                        Check description for more information about the paper 👇
+                                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '28px', textAlign: 'center', gap: '24px' }}>
+                                                    <div style={{ color: '#ffffff', fontSize: '3rem', fontWeight: 700, lineHeight: 1.22 }}>
+                                                        {editedOutro}
                                                     </div>
 
-                                                    <div style={{ padding: '50px', background: 'rgba(100, 255, 218, 0.05)', borderRadius: '30px', border: '1px solid rgba(100, 255, 218, 0.15)' }}>
-                                                        <div style={{ color: '#ffffff', fontSize: '3.2rem', fontWeight: 600, marginBottom: '20px', lineHeight: 1.3 }}>
-                                                            {editedOutro}
+                                                    <div style={{ padding: '38px 42px', background: 'rgba(10, 10, 15, 0.55)', borderRadius: '24px', border: '1px solid rgba(100, 255, 218, 0.22)', display: 'grid', gap: '18px' }}>
+                                                        <div style={{ color: 'rgba(255,255,255,0.94)', fontSize: '2rem', fontWeight: 700, lineHeight: 1.28 }}>
+                                                            The Eureka Feed
                                                         </div>
-                                                        <div style={{ color: 'var(--accent)', fontSize: '3rem', fontWeight: '700', letterSpacing: '0.02em' }}>
+                                                        <div style={{ color: 'rgba(255,255,255,0.82)', fontSize: '1.35rem', lineHeight: 1.45 }}>
+                                                            We turn complex papers into short content backed by real research.
+                                                        </div>
+                                                        <div style={{ color: 'var(--accent)', fontSize: '2rem', fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.3 }}>
                                                             {editedOutroFollow}
                                                         </div>
                                                     </div>
@@ -1547,7 +2025,7 @@ export default function CarouselGenerator() {
                                             resize: 'vertical',
                                             lineHeight: 1.5,
                                         }}
-                                        placeholder="Edit final slide outro..."
+                                        placeholder="Edit description CTA..."
                                     />
                                     <textarea
                                         value={editedOutroFollow}
@@ -1567,7 +2045,7 @@ export default function CarouselGenerator() {
                                             resize: 'vertical',
                                             lineHeight: 1.5,
                                         }}
-                                        placeholder="Edit follow text..."
+                                        placeholder="Edit follow CTA..."
                                     />
                                 </div>
                             </div>
@@ -1578,7 +2056,7 @@ export default function CarouselGenerator() {
 
 
             {/* Reel Generator */}
-            {(episode || ((activeTab === 'top-papers' || activeTab === 'daily-science') && selectedPaperId) || activeTab === 'custom') && (
+            {showReelSection && (
                 <div style={{
                     marginTop: '3rem',
                     padding: '2rem',
@@ -1616,11 +2094,11 @@ export default function CarouselGenerator() {
                                 {isCustomTab
                                     ? 'Build the custom reel in stages: write the narration, choose the voice, compile the audio, shape the visual timeline, then assemble the final video.'
                                     : 'Generate a vertical 9:16 reel with animated waveform, word-by-word captions synced to audio, and catchy transitions.'}
-                                {episode ? ' Click on any sentence in the transcript below to set the start time.' : ' Write or generate a narration script below.'}
+                                {!isCustomTab && episode ? ' Click on any sentence in the transcript below to set the start time.' : ' Write or generate a narration script below.'}
                             </p>
 
                             {/* Transcript viewer — only for episodes */}
-                            {episode && transcriptSentences.length > 0 && (
+                            {!isCustomTab && episode && transcriptSentences.length > 0 && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>Episode Transcript</label>
                                     <div style={{
@@ -1953,33 +2431,132 @@ export default function CarouselGenerator() {
                                             <div style={{ marginTop: '1.25rem', paddingTop: '1.1rem', borderTop: '1px solid var(--border)' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                                                     <div>
-                                                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)' }}>Step 1: Compile Audio</h3>
+                                                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)' }}>Step 1: Audio Source & Timing</h3>
                                                         <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, maxWidth: '640px' }}>
-                                                            Lock the narration first. After this, the scene planning section uses the compiled voice pacing for anchors, prompts, and image timing.
+                                                            Compile TTS or upload a finished narration. Whisper timing drives the rest of the reel workflow.
                                                         </p>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 1fr)', gap: '1rem', marginBottom: '1rem', alignItems: 'start' }}>
+                                                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                                        <div>
+                                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Audio source mode</label>
+                                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                {[
+                                                                    { value: 'tts', label: 'Generate Voice' },
+                                                                    { value: 'upload', label: 'Upload Narration' },
+                                                                ].map(option => (
+                                                                    <button
+                                                                        key={option.value}
+                                                                        type="button"
+                                                                        onClick={() => setAudioSourceMode(option.value as 'tts' | 'upload')}
+                                                                        style={{
+                                                                            padding: '0.55rem 0.9rem',
+                                                                            borderRadius: '999px',
+                                                                            border: `1px solid ${audioSourceMode === option.value ? 'var(--accent)' : 'var(--border)'}`,
+                                                                            background: audioSourceMode === option.value ? 'rgba(100, 255, 218, 0.08)' : 'var(--bg-secondary)',
+                                                                            color: audioSourceMode === option.value ? 'var(--accent)' : 'var(--text-primary)',
+                                                                            fontWeight: 600,
+                                                                            cursor: 'pointer',
+                                                                        }}
+                                                                    >
+                                                                        {option.label}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                            <p style={{ margin: '0.45rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                                                {audioSourceMode === 'tts'
+                                                                    ? 'Generate Voice uses the script and voice settings in this panel to create a fresh narration audio track.'
+                                                                    : 'Upload Narration keeps your existing recorded audio and only uses Whisper to derive timestamps and captions.'}
+                                                            </p>
+                                                        </div>
+                                                        {audioSourceMode === 'upload' && (
+                                                            <>
+                                                                <div>
+                                                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Narration audio file</label>
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="audio/*"
+                                                                        onChange={(e) => setUploadedAudioFile(e.target.files?.[0] ?? null)}
+                                                                        style={{ width: '100%' }}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+                                                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 0 }}>Transcript (optional)</label>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                if (!uploadedTranscript.trim()) {
+                                                                                    alert('Paste transcript text first.');
+                                                                                    return;
+                                                                                }
+                                                                                setPunctuatingTranscript(true);
+                                                                                try {
+                                                                                    const result = await punctuateTranscript(uploadedTranscript);
+                                                                                    setUploadedTranscript(result.display_transcript);
+                                                                                } catch (err: any) {
+                                                                                    alert(err.message || 'Failed to punctuate transcript');
+                                                                                } finally {
+                                                                                    setPunctuatingTranscript(false);
+                                                                                }
+                                                                            }}
+                                                                            disabled={punctuatingTranscript || !uploadedTranscript.trim()}
+                                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.6rem', borderRadius: '7px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: punctuatingTranscript ? 'wait' : 'pointer', fontSize: '0.75rem' }}
+                                                                        >
+                                                                            {punctuatingTranscript ? <Loader2 size={12} className={styles.spinAnimation} /> : <Sparkles size={12} />}
+                                                                            {punctuatingTranscript ? 'Punctuating...' : 'Punctuate for Display'}
+                                                                        </button>
+                                                                    </div>
+                                                                    <textarea
+                                                                        value={uploadedTranscript}
+                                                                        onChange={(e) => setUploadedTranscript(e.target.value)}
+                                                                        rows={4}
+                                                                        placeholder="Paste transcript (optional). Use 'Punctuate for Display' to clean punctuation and filler words without changing Whisper timing."
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            padding: '0.7rem',
+                                                                            borderRadius: '8px',
+                                                                            border: '1px solid var(--border)',
+                                                                            background: 'var(--bg-secondary)',
+                                                                            color: 'var(--text-primary)',
+                                                                            resize: 'vertical',
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
                                                     </div>
                                                     <button
                                                         type="button"
                                                         onClick={async () => {
-                                                            if (!reelScript.trim()) {
+                                                            if (audioSourceMode === 'tts' && !reelScript.trim()) {
                                                                 alert('Enter a narration script first.');
+                                                                return;
+                                                            }
+                                                            if (audioSourceMode === 'upload' && !uploadedAudioFile) {
+                                                                alert('Upload a narration file first.');
                                                                 return;
                                                             }
                                                             setExtractingTimeline(true);
                                                             setGeneratedReelImages([]);
                                                             try {
-                                                                const { audio_url, timeline, duration, word_timestamps, rewritten_script } = await compileAudioTimeline(
-                                                                    reelScript,
-                                                                    reelVoice,
-                                                                    ttsProvider,
-                                                                    reelSpeed,
+                                                                const { audio_url, timeline, scenes, duration, word_timestamps, rewritten_script, display_script } = await compileAudioTimeline({
+                                                                    script: audioSourceMode === 'tts' ? reelScript : undefined,
+                                                                    voice: reelVoice,
+                                                                    voiceProvider: ttsProvider,
+                                                                    speed: reelSpeed,
                                                                     elevenlabsStability,
                                                                     elevenlabsSimilarityBoost,
                                                                     elevenlabsStyle,
-                                                                );
-                                                                setReelScript(rewritten_script);
+                                                                    audioFile: audioSourceMode === 'upload' ? uploadedAudioFile : null,
+                                                                    transcriptText: uploadedTranscript,
+                                                                });
+                                                                setReelScript(display_script || rewritten_script);
                                                                 setAnchorWords(timeline);
                                                                 setAnchorTimeline([]);
+                                                                setSceneTimeline(scenes);
+                                                                setGeneratedReelImages([]);
                                                                 setAudioPreviewUrl(`${API_BASE_URL.replace('/api/v1', '')}${audio_url}`);
                                                                 setReelDuration(Math.ceil(duration));
                                                                 setWordTimestamps(word_timestamps);
@@ -2007,7 +2584,7 @@ export default function CarouselGenerator() {
                                                         }}
                                                     >
                                                         {extractingTimeline ? <Loader2 size={16} className={styles.spinAnimation} /> : <Sparkles size={16} />}
-                                                        {extractingTimeline ? 'Compiling Audio & Timeline...' : 'Compile Audio & Timeline'}
+                                                        {extractingTimeline ? 'Compiling Audio & Timeline...' : audioSourceMode === 'tts' ? 'Compile Voice & Timeline' : 'Transcribe Upload & Build Timeline'}
                                                     </button>
                                                 </div>
                                                 {audioPreviewUrl && (
@@ -2170,8 +2747,594 @@ export default function CarouselGenerator() {
                                             </div>
                                         )}
 
+                                        {isCustomTab && sceneTimeline.length > 0 && (
+                                            <div style={{ display: 'grid', gap: '1.5rem' }}>
+                                                <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'var(--bg-tertiary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                                        <div>
+                                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <Sparkles size={18} style={{ color: 'var(--accent)' }} /> Step 2: Scene Timeline
+                                                            </h3>
+                                                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.45rem 0 0' }}>
+                                                                Scene timing follows the voice-over. Drag markers to retime cuts before choosing visuals.
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    setResolvingSceneCandidates(true);
+                                                                    try {
+                                                                        const result = await resolveSceneCandidates(reelScript, sceneTimeline);
+                                                                        setSceneTimeline(result.scenes);
+                                                                        setSceneFilter('all');
+                                                                    } catch (err: any) {
+                                                                        setReelError(err.message || 'Failed to fetch scene candidates');
+                                                                    } finally {
+                                                                        setResolvingSceneCandidates(false);
+                                                                    }
+                                                                }}
+                                                                disabled={resolvingSceneCandidates}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.45rem',
+                                                                    padding: '0.65rem 1rem',
+                                                                    borderRadius: '8px',
+                                                                    border: '1px solid var(--accent)',
+                                                                    background: 'rgba(100, 255, 218, 0.08)',
+                                                                    color: 'var(--accent)',
+                                                                    fontWeight: 600,
+                                                                    cursor: resolvingSceneCandidates ? 'wait' : 'pointer',
+                                                                }}
+                                                            >
+                                                                {resolvingSceneCandidates ? <Loader2 size={16} className={styles.spinAnimation} /> : <Layers size={16} />}
+                                                                {resolvingSceneCandidates ? 'Matching Stock Candidates...' : 'Step 3: Fetch Stock Picks'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}>
+                                                        <div>
+                                                            <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#fff' }}>Anchor Words</h4>
+                                                            <p style={{ margin: '0.3rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                                                These are the exact words driving scene switches. Edit them if you want the cuts to lock to different spoken words.
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
+                                                            {sceneTimeline.map((scene, idx) => (
+                                                                <div key={scene.scene_id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.7rem', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.86rem' }}>
+                                                                    <span style={{ opacity: 0.5, fontSize: '0.72rem', fontWeight: 700 }}>{idx + 1}</span>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={scene.anchor_word}
+                                                                        onChange={(e) => {
+                                                                            const rawValue = e.target.value;
+                                                                            const val = rawValue.trim();
+                                                                            setSceneTimeline(prev => prev.map((item) => {
+                                                                                if (item.scene_id !== scene.scene_id) return item;
+                                                                                let start = item.start_time_seconds;
+                                                                                let end = item.end_time_seconds;
+                                                                                if (val && wordTimestamps.length > 0) {
+                                                                                    const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                                                                    const normVal = normalise(val);
+                                                                                    const matches = wordTimestamps.filter(w => normalise(w.word) === normVal);
+                                                                                    if (matches.length > 0) {
+                                                                                        const totalDuration = wordTimestamps[wordTimestamps.length - 1].end;
+                                                                                        const idealTime = (idx / Math.max(prev.length - 1, 1)) * totalDuration;
+                                                                                        const best = matches.reduce((a, b) =>
+                                                                                            Math.abs(a.start - idealTime) <= Math.abs(b.start - idealTime) ? a : b
+                                                                                        );
+                                                                                        start = best.start;
+                                                                                        end = best.end;
+                                                                                    }
+                                                                                }
+                                                                                return { ...item, anchor_word: rawValue, start_time_seconds: start, end_time_seconds: end };
+                                                                            }));
+                                                                            setAnchorWords(prev => prev.map((item, itemIdx) => itemIdx === idx ? {
+                                                                                ...item,
+                                                                                word: rawValue,
+                                                                                start_time_seconds: sceneTimeline[idx]?.start_time_seconds ?? item.start_time_seconds,
+                                                                                end_time_seconds: sceneTimeline[idx]?.end_time_seconds ?? item.end_time_seconds,
+                                                                            } : item));
+                                                                        }}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontWeight: 600, width: '96px', outline: 'none' }}
+                                                                    />
+                                                                    <span style={{ opacity: 0.45, fontSize: '0.76rem' }}>{scene.start_time_seconds.toFixed(2)}s</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {timelineDuration > 0 && (
+                                                        <div className={styles.transitionEditor}>
+                                                            <div className={styles.transitionEditorHeader}>
+                                                                <div>
+                                                                    <h5 style={{ margin: 0, fontSize: '0.9rem', color: '#fff' }}>Transition Timing Lane</h5>
+                                                                    <p style={{ margin: '0.3rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                                                        Drag each scene marker to move the switch on the narration. Selections stay attached to the scene.
+                                                                    </p>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                                                                    <span className={styles.transitionTimeBadge}>
+                                                                        {audioPreviewCurrentTime.toFixed(2)}s / {timelineDuration.toFixed(2)}s
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => addSceneAtTime(audioPreviewCurrentTime)}
+                                                                        title="Add scene at current playhead time"
+                                                                        style={{
+                                                                            width: '34px',
+                                                                            height: '34px',
+                                                                            borderRadius: '999px',
+                                                                            border: '1px solid var(--accent)',
+                                                                            background: 'rgba(100, 255, 218, 0.14)',
+                                                                            color: 'var(--accent)',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            cursor: 'pointer',
+                                                                        }}
+                                                                    >
+                                                                        <Plus size={15} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <div
+                                                                ref={transitionTimelineRef}
+                                                                className={styles.transitionTrack}
+                                                                onPointerDown={(event) => {
+                                                                    if (event.target !== transitionTimelineRef.current) return;
+                                                                    const track = transitionTimelineRef.current;
+                                                                    if (!track || !audioPreviewRef.current || timelineDuration <= 0) return;
+                                                                    const rect = track.getBoundingClientRect();
+                                                                    const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+                                                                    const nextTime = ratio * timelineDuration;
+                                                                    audioPreviewRef.current.currentTime = nextTime;
+                                                                    setAudioPreviewCurrentTime(nextTime);
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    className={styles.transitionPlayhead}
+                                                                    style={{ left: `${Math.min((audioPreviewCurrentTime / timelineDuration) * 100, 100)}%` }}
+                                                                />
+
+                                                                {sceneTimeline.map((scene, idx) => {
+                                                                    const left = timelineDuration > 0 ? (scene.start_time_seconds / timelineDuration) * 100 : 0;
+                                                                    const nextSceneStart = sceneTimeline[idx + 1]?.start_time_seconds ?? timelineDuration;
+                                                                    const width = timelineDuration > 0 ? ((nextSceneStart - scene.start_time_seconds) / timelineDuration) * 100 : 0;
+                                                                    return (
+                                                                        <div key={scene.scene_id}>
+                                                                            <div className={styles.transitionSegment} style={{ left: `${left}%`, width: `${Math.max(width, 4)}%`, opacity: idx === draggingTransitionIdx ? 0.95 : 0.72 }}>
+                                                                                <span>{scene.transcript_excerpt || scene.anchor_word}</span>
+                                                                            </div>
+                                                                            <button
+                                                                                type="button"
+                                                                                className={styles.transitionMarker}
+                                                                                style={{ left: `${left}%` }}
+                                                                                onPointerDown={(event) => {
+                                                                                    event.preventDefault();
+                                                                                    event.stopPropagation();
+                                                                                    setDraggingTransitionIdx(idx);
+                                                                                    updateTransitionFromClientX(idx, event.clientX);
+                                                                                }}
+                                                                                title={`${scene.anchor_word} at ${scene.start_time_seconds.toFixed(2)}s`}
+                                                                            >
+                                                                                <span className={styles.transitionMarkerIndex}>{idx + 1}</span>
+                                                                                <span className={styles.transitionMarkerLabel}>{scene.anchor_word}</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ padding: '1.25rem', background: 'var(--bg-tertiary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                                        <div>
+                                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <Layers size={18} style={{ color: 'var(--accent)' }} /> Step 3: Stock Picks + Manual Library
+                                                            </h3>
+                                                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.45rem 0 0' }}>
+                                                                Auto-matching now uses stock images/videos only. Local library assets are manual override via the dropdown per scene.
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                            <div>
+                                                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>Scene filter</label>
+                                                                <select
+                                                                    value={sceneFilter}
+                                                                    onChange={(e) => setSceneFilter(e.target.value as 'all' | 'unresolved' | 'ai-eligible')}
+                                                                    style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                                                >
+                                                                    <option value="all">All scenes</option>
+                                                                    <option value="unresolved">Unresolved only</option>
+                                                                    <option value="ai-eligible">AI-eligible only</option>
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>AI scene cap</label>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={20}
+                                                                    value={maxAiGeneratedScenes}
+                                                                    onChange={(e) => setMaxAiGeneratedScenes(Number(e.target.value) || 0)}
+                                                                    style={{ width: '96px', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    setGeneratingSceneAi(true);
+                                                                    try {
+                                                                        const result = await generateSceneAiFallbacks(reelScript, sceneTimeline, maxAiGeneratedScenes);
+                                                                        setSceneTimeline(result.scenes);
+                                                                        setSceneFilter('ai-eligible');
+                                                                    } catch (err: any) {
+                                                                        setReelError(err.message || 'Failed to build AI fallback prompts');
+                                                                    } finally {
+                                                                        setGeneratingSceneAi(false);
+                                                                    }
+                                                                }}
+                                                                disabled={generatingSceneAi}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.45rem',
+                                                                    padding: '0.65rem 1rem',
+                                                                    borderRadius: '8px',
+                                                                    border: 'none',
+                                                                    background: 'var(--accent)',
+                                                                    color: '#000',
+                                                                    fontWeight: 600,
+                                                                    cursor: generatingSceneAi ? 'wait' : 'pointer',
+                                                                }}
+                                                            >
+                                                                {generatingSceneAi ? <Loader2 size={16} className={styles.spinAnimation} /> : <Sparkles size={16} />}
+                                                                {generatingSceneAi ? 'Generating AI Fallbacks...' : 'Step 4: Create AI Fill-Ins'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '1000px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                                        {filteredScenes.map((scene, idx) => {
+                                                            const sceneIndex = sceneTimeline.findIndex(item => item.scene_id === scene.scene_id);
+                                                            const selectedPreview = scene.selected_asset?.asset_url || scene.ai_image_url || '';
+                                                            const selectedAssetType = scene.selected_asset?.asset_source || scene.asset_source || 'none';
+                                                            const selectedLocalAssetCandidateId =
+                                                                selectedAssetType.startsWith('local_')
+                                                                    ? (scene.selected_asset?.candidate_id || '')
+                                                                    : '';
+                                                            return (
+                                                                <div key={scene.scene_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 1fr)', gap: '1rem', background: 'var(--bg-secondary)', borderRadius: '10px', border: '1px solid var(--border)', padding: '1rem' }}>
+                                                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                                                            <div>
+                                                                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                                                    {`Scene ${sceneIndex + 1}`}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                                                                                    {scene.anchor_word} • {scene.start_time_seconds.toFixed(2)}s to {scene.end_time_seconds.toFixed(2)}s
+                                                                                </div>
+                                                                            </div>
+                                                                            <span style={{ fontSize: '0.75rem', color: '#888', background: '#161616', padding: '0.2rem 0.5rem', borderRadius: '999px' }}>
+                                                                                {scene.scene_state.replace(/_/g, ' ')}
+                                                                            </span>
+                                                                            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => addSceneAfter(scene.scene_id)}
+                                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.55rem', borderRadius: '7px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.72rem' }}
+                                                                                    title="Add a scene after this one"
+                                                                                >
+                                                                                    <Plus size={13} />
+                                                                                    Add
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => deleteScene(scene.scene_id)}
+                                                                                    disabled={sceneTimeline.length <= 1}
+                                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.55rem', borderRadius: '7px', border: '1px solid #5a2a2a', background: 'transparent', color: sceneTimeline.length <= 1 ? '#666' : '#ff8a8a', cursor: sceneTimeline.length <= 1 ? 'not-allowed' : 'pointer', fontSize: '0.72rem' }}
+                                                                                    title={sceneTimeline.length <= 1 ? 'At least one scene is required' : 'Delete this scene'}
+                                                                                >
+                                                                                    <Trash2 size={13} />
+                                                                                    Delete
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ padding: '0.6rem', background: '#161616', borderRadius: '8px', fontSize: '0.82rem', color: '#ddd', fontStyle: 'italic' }}>
+                                                                            "{scene.transcript_excerpt || scene.anchor_word}"
+                                                                        </div>
+                                                                        {scene.search_queries.length > 0 && (
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                                                {scene.search_queries.map(query => (
+                                                                                    <span key={query} style={{ fontSize: '0.72rem', border: '1px solid #333', borderRadius: '999px', padding: '0.25rem 0.55rem', color: 'var(--text-secondary)' }}>
+                                                                                        {query}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        <div style={{ display: 'grid', gap: '0.35rem' }}>
+                                                                            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                                Pick from local library (manual override)
+                                                                            </label>
+                                                                            <select
+                                                                                value={selectedLocalAssetCandidateId}
+                                                                                onChange={(e) => {
+                                                                                    const nextId = e.target.value;
+                                                                                    if (!nextId) return;
+                                                                                    const chosen = localLibraryAssets.find(asset => asset.candidate_id === nextId);
+                                                                                    if (!chosen) return;
+                                                                                    setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                        ...item,
+                                                                                        selected_asset: {
+                                                                                            asset_source: chosen.type,
+                                                                                            asset_url: chosen.asset_url,
+                                                                                            thumbnail_url: chosen.thumbnail_url,
+                                                                                            candidate_id: chosen.candidate_id,
+                                                                                        },
+                                                                                        asset_source: chosen.type,
+                                                                                        scene_state: 'resolved_by_library',
+                                                                                    } : item));
+                                                                                }}
+                                                                                style={{ width: '100%', padding: '0.55rem 0.7rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: '#ddd', fontSize: '0.78rem' }}
+                                                                            >
+                                                                                <option value="">
+                                                                                    {loadingLocalLibraryAssets ? 'Loading local assets...' : 'Select local asset...'}
+                                                                                </option>
+                                                                                {localLibraryAssets.map(asset => (
+                                                                                    <option key={asset.candidate_id} value={asset.candidate_id}>
+                                                                                        {(asset.type === 'local_video' ? 'VIDEO' : 'IMAGE')} · {asset.query}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </select>
+                                                                        </div>
+                                                                        {scene.stock_candidates.length > 0 && (
+                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
+                                                                                {scene.stock_candidates.map(candidate => (
+                                                                                    <button
+                                                                                        key={candidate.candidate_id}
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            const nextSceneState = candidate.type.startsWith('local_')
+                                                                                                ? 'resolved_by_library'
+                                                                                                : 'resolved_by_stock';
+                                                                                            setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                                ...item,
+                                                                                                selected_asset: {
+                                                                                                    asset_source: candidate.type,
+                                                                                                    asset_url: candidate.asset_url,
+                                                                                                    thumbnail_url: candidate.thumbnail_url,
+                                                                                                    candidate_id: candidate.candidate_id,
+                                                                                                },
+                                                                                                asset_source: candidate.type,
+                                                                                                scene_state: nextSceneState,
+                                                                                            } : item));
+                                                                                        }}
+                                                                                        style={{ border: scene.selected_asset?.candidate_id === candidate.candidate_id ? '1px solid var(--accent)' : '1px solid #333', background: '#121212', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                                                                                    >
+                                                                                        <div style={{ aspectRatio: '9 / 16', background: '#1a1a1a', position: 'relative' }}>
+                                                                                            {isVideoAssetType(candidate.type) ? (
+                                                                                                <video
+                                                                                                    src={resolveAssetUrl(candidate.asset_url)}
+                                                                                                    poster={resolveAssetUrl(candidate.thumbnail_url)}
+                                                                                                    controls
+                                                                                                    muted
+                                                                                                    playsInline
+                                                                                                    preload="metadata"
+                                                                                                    onClick={(event) => event.stopPropagation()}
+                                                                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000' }}
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <img src={resolveAssetUrl(candidate.thumbnail_url)} alt={candidate.query} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                                            )}
+                                                                                            <div style={{ position: 'absolute', top: '0.4rem', left: '0.4rem', background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: '0.66rem', fontWeight: 700, padding: '0.2rem 0.45rem', borderRadius: '999px', pointerEvents: 'none' }}>
+                                                                                                {isVideoAssetType(candidate.type) ? 'VIDEO' : 'IMAGE'}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div style={{ padding: '0.5rem' }}>
+                                                                                            <div style={{ fontSize: '0.72rem', color: '#fff', fontWeight: 600 }}>{describeCandidateType(candidate.type)}</div>
+                                                                                            <div style={{ fontSize: '0.68rem', color: '#888', marginTop: '0.2rem' }}>{candidate.query}</div>
+                                                                                            <div style={{ fontSize: '0.66rem', color: '#777', marginTop: '0.2rem' }}>
+                                                                                                {candidate.source_provider} • score {candidate.score.toFixed(1)}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: uploadingSceneAssetId === scene.scene_id ? 'wait' : 'pointer', fontSize: '0.78rem' }}>
+                                                                                <Plus size={12} />
+                                                                                {uploadingSceneAssetId === scene.scene_id ? 'Uploading...' : 'Upload image'}
+                                                                                <input
+                                                                                    type="file"
+                                                                                    accept="image/*"
+                                                                                    style={{ display: 'none' }}
+                                                                                    disabled={uploadingSceneAssetId === scene.scene_id}
+                                                                                    onChange={async (e) => {
+                                                                                        const inputEl = e.currentTarget;
+                                                                                        const file = e.target.files?.[0] ?? null;
+                                                                                        await handleSceneAssetUpload(scene.scene_id, file);
+                                                                                        if (inputEl) inputEl.value = '';
+                                                                                    }}
+                                                                                />
+                                                                            </label>
+                                                                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: uploadingSceneAssetId === scene.scene_id ? 'wait' : 'pointer', fontSize: '0.78rem' }}>
+                                                                                <Film size={12} />
+                                                                                {uploadingSceneAssetId === scene.scene_id ? 'Uploading...' : 'Upload video'}
+                                                                                <input
+                                                                                    type="file"
+                                                                                    accept="video/*"
+                                                                                    style={{ display: 'none' }}
+                                                                                    disabled={uploadingSceneAssetId === scene.scene_id}
+                                                                                    onChange={async (e) => {
+                                                                                        const inputEl = e.currentTarget;
+                                                                                        const file = e.target.files?.[0] ?? null;
+                                                                                        await handleSceneAssetUpload(scene.scene_id, file);
+                                                                                        if (inputEl) inputEl.value = '';
+                                                                                    }}
+                                                                                />
+                                                                            </label>
+                                                                        </div>
+                                                                        <div style={{ display: 'grid', gap: '0.5rem' }}>
+                                                                            <textarea
+                                                                                value={scene.ai_prompt || ''}
+                                                                                onChange={(e) => {
+                                                                                    const nextPrompt = e.target.value;
+                                                                                    scenePromptDraftRef.current[scene.scene_id] = nextPrompt;
+                                                                                    setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? { ...item, ai_prompt: nextPrompt } : item));
+                                                                                }}
+                                                                                rows={4}
+                                                                                placeholder="AI fallback prompt for this scene"
+                                                                                style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: 'var(--text-primary)', resize: 'vertical' }}
+                                                                            />
+                                                                            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={async () => {
+                                                                                        const currentScene = sceneTimeline.find(item => item.scene_id === scene.scene_id);
+                                                                                        if (!currentScene) return;
+                                                                                        setGeneratingPromptSceneId(scene.scene_id);
+                                                                                        try {
+                                                                                            const semanticSeed = currentScene.visual_focus_word || currentScene.anchor_phrase || currentScene.anchor_word;
+                                                                                            const promptSeed = `${semanticSeed}. ${currentScene.transcript_excerpt || ''}`.trim();
+                                                                                            const result = await generateImagePrompt(promptSeed);
+                                                                                            setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                                ...item,
+                                                                                                ai_prompt: result.prompt,
+                                                                                                scene_state: item.asset_source === 'none' ? 'ai_eligible' : item.scene_state,
+                                                                                            } : item));
+                                                                                            scenePromptDraftRef.current[scene.scene_id] = result.prompt;
+                                                                                        } catch (e: any) {
+                                                                                            alert('Failed to generate AI prompt: ' + e.message);
+                                                                                        } finally {
+                                                                                            setGeneratingPromptSceneId(null);
+                                                                                        }
+                                                                                    }}
+                                                                                    disabled={generatingPromptSceneId === scene.scene_id}
+                                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1px solid var(--accent)', background: 'rgba(100, 255, 218, 0.08)', color: 'var(--accent)', cursor: generatingPromptSceneId === scene.scene_id ? 'wait' : 'pointer', fontWeight: 600 }}
+                                                                                >
+                                                                                    {generatingPromptSceneId === scene.scene_id ? <Loader2 size={14} className={styles.spinAnimation} /> : <Sparkles size={14} />}
+                                                                                    {generatingPromptSceneId === scene.scene_id ? 'Generating prompt...' : 'Generate AI prompt'}
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={async () => {
+                                                                                        const currentScene = sceneTimeline.find(item => item.scene_id === scene.scene_id);
+                                                                                        const latestPrompt = (scenePromptDraftRef.current[scene.scene_id] ?? currentScene?.ai_prompt ?? "").trim();
+                                                                                        if (!latestPrompt) return;
+                                                                                        setRegeneratingImageIdx(sceneIndex);
+                                                                                        try {
+                                                                                            const result = await generateImage(latestPrompt, visualStyle);
+                                                                                            setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                                ...item,
+                                                                                                ai_image_url: result.image_url,
+                                                                                                ai_prompt: latestPrompt,
+                                                                                                last_generated_ai_prompt: latestPrompt,
+                                                                                                selected_asset: {
+                                                                                                    asset_source: 'ai_image',
+                                                                                                    asset_url: result.image_url,
+                                                                                                    thumbnail_url: result.image_url,
+                                                                                                    candidate_id: null,
+                                                                                                },
+                                                                                                asset_source: 'ai_image',
+                                                                                                scene_state: 'resolved_by_ai',
+                                                                                            } : item));
+                                                                                            if (sceneFilter === 'ai-eligible') {
+                                                                                                setSceneFilter('all');
+                                                                                            }
+                                                                                        } catch (e: any) {
+                                                                                            alert('Failed to generate AI image: ' + e.message);
+                                                                                        } finally {
+                                                                                            setRegeneratingImageIdx(null);
+                                                                                        }
+                                                                                    }}
+                                                                                    disabled={regeneratingImageIdx === sceneIndex || !scene.ai_prompt?.trim()}
+                                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: regeneratingImageIdx === sceneIndex ? 'wait' : 'pointer' }}
+                                                                                >
+                                                                                    {regeneratingImageIdx === sceneIndex ? <Loader2 size={14} className={styles.spinAnimation} /> : <RefreshCw size={14} />}
+                                                                                    {scene.ai_image_url ? 'Regenerate AI image' : 'Generate AI image'}
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                            ...item,
+                                                                                            selected_asset: null,
+                                                                                            asset_source: 'none',
+                                                                                            scene_state: item.ai_prompt ? 'ai_eligible' : 'unresolved',
+                                                                                        } : item));
+                                                                                    }}
+                                                                                    style={{ padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                                                                >
+                                                                                    Clear selection
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div style={{ background: '#0f0f12', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.75rem', borderBottom: '1px solid #333', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+                                                                            <span>Selected preview</span>
+                                                                            <span style={{ fontWeight: 700, color: isVideoAssetType(selectedAssetType) ? 'var(--accent)' : 'var(--text-primary)' }}>
+                                                                                {selectedAssetType === 'local_video'
+                                                                                    ? 'LIBRARY VIDEO'
+                                                                                    : selectedAssetType === 'local_image'
+                                                                                        ? 'LIBRARY IMAGE'
+                                                                                    : selectedAssetType === 'stock_video'
+                                                                                        ? 'STOCK VIDEO'
+                                                                                    : selectedAssetType === 'user_video'
+                                                                                        ? 'USER VIDEO'
+                                                                                    : selectedAssetType === 'stock_image'
+                                                                                        ? 'STOCK IMAGE'
+                                                                                    : selectedAssetType === 'user_image'
+                                                                                        ? 'USER IMAGE'
+                                                                                    : selectedAssetType === 'ai_image'
+                                                                                        ? 'AI IMAGE'
+                                                                                        : 'NONE'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div style={{ aspectRatio: '9 / 16', background: '#151515', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                            {selectedPreview ? (
+                                                                                isVideoAssetType(selectedAssetType) ? (
+                                                                                    <video src={resolveAssetUrl(selectedPreview)} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                                ) : (
+                                                                                    <img src={resolveAssetUrl(selectedPreview)} alt={`Scene ${sceneIndex + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                                )
+                                                                            ) : (
+                                                                                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No selected asset yet</div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div style={{ padding: '0.75rem', borderTop: '1px solid #333', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                                                            Current asset: {selectedAssetType.replace(/_/g, ' ')}
+                                                                        </div>
+                                                                        {selectedAssetType === 'ai_image' && (scene.last_generated_ai_prompt || scene.ai_prompt) && (
+                                                                            <div style={{ padding: '0.75rem', borderTop: '1px solid #333', display: 'grid', gap: '0.35rem' }}>
+                                                                                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent)' }}>
+                                                                                    Prompt used for this AI image
+                                                                                </div>
+                                                                                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                                                                    {scene.last_generated_ai_prompt || scene.ai_prompt}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* (Anchor Words selection block was here) */}
-                                        {anchorWords.length > 0 && (
+                                        {!isCustomTab && anchorWords.length > 0 && (
                                             <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'var(--bg-tertiary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
                                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                     <Sparkles size={18} style={{ color: 'var(--accent)' }} /> Step 2: Review Anchor Words
@@ -2295,7 +3458,7 @@ export default function CarouselGenerator() {
                                             </div>
                                         )}
 
-                                        {anchorTimeline.length > 0 && (
+                                        {!isCustomTab && anchorTimeline.length > 0 && (
                                             <div style={{ marginTop: '2.5rem' }}>
                                                 <div style={{ padding: '1rem', background: '#111', borderRadius: '8px', marginBottom: '2rem', border: '1px solid #333' }}>
                                                     <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'var(--accent)' }}>Scene Timeline Editor</h4>
@@ -2542,7 +3705,7 @@ export default function CarouselGenerator() {
                                             </div>
                                         )}
 
-                                        {anchorTimeline.length > 0 && (
+                                        {!isCustomTab && anchorTimeline.length > 0 && (
                                             <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                                     <div>
@@ -2684,6 +3847,7 @@ export default function CarouselGenerator() {
                                     )}
 
                                     {/* Fetch visuals — stock footage for reel background */}
+                                    {!isCustomTab && (
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                                             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Background visuals</label>
@@ -2891,6 +4055,7 @@ export default function CarouselGenerator() {
                                             </div>
                                         )}
                                     </div>
+                                    )}
 
                                     {isCustomTab && (
                                         <label style={{
@@ -3179,7 +4344,7 @@ export default function CarouselGenerator() {
                                             try {
                                                 // Prioritize the narration script textarea
                                                 let customText: string | undefined;
-                                                if (reelScript.trim()) {
+                                                if (audioSourceMode === 'tts' && reelScript.trim()) {
                                                     customText = reelScript.trim();
                                                 } else if (useHdTts && transcriptSentences.length > 0) {
                                                     const selected = transcriptSentences.filter(
@@ -3189,11 +4354,27 @@ export default function CarouselGenerator() {
                                                         customText = selected.map(s => s.text).join(' ');
                                                     }
                                                 }
+                                                const inferredSceneEnd = sceneTimeline.reduce((maxEnd, scene) => {
+                                                    const sceneEnd = Number(scene.end_time_seconds ?? scene.start_time_seconds ?? 0);
+                                                    return Number.isFinite(sceneEnd) ? Math.max(maxEnd, sceneEnd) : maxEnd;
+                                                }, 0);
+                                                const inferredWordEnd = wordTimestamps.reduce((maxEnd, word) => {
+                                                    const wordEnd = Number(word.end ?? 0);
+                                                    return Number.isFinite(wordEnd) ? Math.max(maxEnd, wordEnd) : maxEnd;
+                                                }, 0);
+                                                const inferredAudioEnd = Number(audioPreviewDuration || 0);
+                                                const inferredDuration = Math.ceil(
+                                                    Math.max(reelDuration, inferredSceneEnd, inferredWordEnd, inferredAudioEnd) + 0.5
+                                                );
+                                                const effectiveStart = isCustomTab ? 0 : audioStart;
+                                                const effectiveDuration = isCustomTab
+                                                    ? Math.max(reelDuration, inferredDuration || reelDuration)
+                                                    : reelDuration;
                                                 const result = await generateReel(
                                                     episode ? episode.id : null,
                                                     reelHeadline,
-                                                    audioStart,
-                                                    reelDuration,
+                                                    effectiveStart,
+                                                    effectiveDuration,
                                                     customText,
                                                     closingStatement || undefined,
                                                     (approvedClips.length === 0 && bgVideo) ? `${window.location.origin}/static/background_videos/${bgVideo}` : undefined,
@@ -3212,6 +4393,7 @@ export default function CarouselGenerator() {
                                                         start_time_seconds: item.start_time_seconds,
                                                         effect_transition_name: item.effect_transition_name,
                                                     })).filter(item => item.image_url !== '') : undefined,
+                                                    isCustomTab && sceneTimeline.length > 0 ? sceneTimeline : undefined,
                                                     audioPreviewUrl || undefined,
                                                     wordTimestamps.length > 0 ? wordTimestamps : undefined,
                                                     includeWaveform

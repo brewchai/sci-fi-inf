@@ -54,3 +54,5 @@ htmlcov/
 frontend/public/static/audiograms/
 backend/static/audio_previews/
 backend/static/carousel_images/
+
+frontend/public/static/background_videos/*

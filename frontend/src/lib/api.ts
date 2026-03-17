@@ -50,6 +50,7 @@ export type CarouselSlide = {
     takeaways: string[];
     caption?: string;
     imageUrl?: string;
+    imageUrls?: string[];
 };
 
 export async function fetchCategories(): Promise<Category[]> {
@@ -257,6 +258,17 @@ export async function fetchVisuals(queries: string[]): Promise<{ clips: VisualCl
     return res.json();
 }
 
+export async function fetchLocalLibraryAssets(limit: number = 500): Promise<{ assets: SceneAssetCandidate[] }> {
+    const res = await fetch(`${API_URL}/content/local-library-assets?limit=${encodeURIComponent(limit)}`, {
+        method: 'GET',
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Fetch local library assets failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function extractScenePrompts(script: string): Promise<{ prompts: string[] }> {
     const res = await fetch(`${API_URL}/content/extract-scene-prompts`, {
         method: 'POST',
@@ -274,6 +286,47 @@ export interface AnchorWord {
     word: string;
     start_time_seconds: number;
     end_time_seconds: number;
+    focus_word?: string | null;
+    anchor_phrase?: string | null;
+}
+
+export interface SceneAssetCandidate {
+    candidate_id: string;
+    type: 'local_image' | 'local_video' | 'stock_image' | 'stock_video';
+    thumbnail_url: string;
+    asset_url: string;
+    source_provider: string;
+    width: number;
+    height: number;
+    duration_seconds?: number | null;
+    query: string;
+    score: number;
+}
+
+export interface SelectedSceneAsset {
+    asset_source: 'local_image' | 'local_video' | 'stock_image' | 'stock_video' | 'ai_image' | 'user_image' | 'user_video' | 'none';
+    asset_url?: string | null;
+    thumbnail_url?: string | null;
+    candidate_id?: string | null;
+}
+
+export interface SceneTimelineItem {
+    scene_id: string;
+    anchor_word: string;
+    visual_focus_word?: string | null;
+    anchor_phrase?: string | null;
+    start_time_seconds: number;
+    end_time_seconds: number;
+    transcript_excerpt: string;
+    effect_transition_name?: string;
+    search_queries: string[];
+    stock_candidates: SceneAssetCandidate[];
+    selected_asset?: SelectedSceneAsset | null;
+    ai_prompt?: string | null;
+    ai_image_url?: string | null;
+    last_generated_ai_prompt?: string | null;
+    asset_source: 'local_image' | 'local_video' | 'stock_image' | 'stock_video' | 'ai_image' | 'user_image' | 'user_video' | 'none';
+    scene_state: 'resolved_by_library' | 'resolved_by_stock' | 'resolved_by_ai' | 'resolved_by_user' | 'unresolved' | 'ai_eligible' | 'ai_blocked_by_cap';
 }
 
 export interface TimelinePrompt {
@@ -289,28 +342,41 @@ export interface WordTimestamp {
     end: number;
 }
 
-export async function compileAudioTimeline(
-    script: string,
-    voice: string,
-    voiceProvider: string,
-    speed: number,
-    elevenlabsStability: number = 0.3,
-    elevenlabsSimilarityBoost: number = 0.75,
-    elevenlabsStyle: number = 0.4,
-): Promise<{ audio_url: string; timeline: AnchorWord[]; duration: number; word_timestamps: WordTimestamp[]; rewritten_script: string }> {
-    const res = await fetch(`${API_URL}/content/compile-audio-timeline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            script,
-            voice,
-            voice_provider: voiceProvider,
-            speed,
-            elevenlabs_stability: elevenlabsStability,
-            elevenlabs_similarity_boost: elevenlabsSimilarityBoost,
-            elevenlabs_style: elevenlabsStyle,
-        }),
-    });
+export async function compileAudioTimeline(params: {
+    script?: string;
+    voice: string;
+    voiceProvider: string;
+    speed: number;
+    elevenlabsStability?: number;
+    elevenlabsSimilarityBoost?: number;
+    elevenlabsStyle?: number;
+    audioFile?: File | null;
+    transcriptText?: string;
+}): Promise<{ audio_url: string; timeline: AnchorWord[]; scenes: SceneTimelineItem[]; duration: number; word_timestamps: WordTimestamp[]; rewritten_script: string; display_script: string }> {
+    let res: Response;
+    if (params.audioFile) {
+        const formData = new FormData();
+        formData.append('audio_file', params.audioFile);
+        if (params.transcriptText?.trim()) formData.append('transcript_text', params.transcriptText.trim());
+        res = await fetch(`${API_URL}/content/compile-uploaded-audio-timeline`, {
+            method: 'POST',
+            body: formData,
+        });
+    } else {
+        res = await fetch(`${API_URL}/content/compile-audio-timeline`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                script: params.script,
+                voice: params.voice,
+                voice_provider: params.voiceProvider,
+                speed: params.speed,
+                elevenlabs_stability: params.elevenlabsStability ?? 0.65,
+                elevenlabs_similarity_boost: params.elevenlabsSimilarityBoost ?? 0.85,
+                elevenlabs_style: params.elevenlabsStyle ?? 0.1,
+            }),
+        });
+    }
     if (!res.ok) {
         const err = await res.text();
         throw new Error(`Compile audio timeline failed: ${err}`);
@@ -327,6 +393,40 @@ export async function rewriteVoiceScript(script: string): Promise<{ rewritten_sc
     if (!res.ok) {
         const err = await res.text();
         throw new Error(`Rewrite voice script failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function punctuateTranscript(transcript: string): Promise<{ display_transcript: string }> {
+    const res = await fetch(`${API_URL}/content/punctuate-transcript`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Punctuate transcript failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function uploadSceneAsset(file: File): Promise<{
+    asset_source: 'user_image' | 'user_video';
+    asset_url: string;
+    thumbnail_url?: string | null;
+    width?: number;
+    height?: number;
+    duration_seconds?: number | null;
+}> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_URL}/content/upload-scene-asset`, {
+        method: 'POST',
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Upload scene asset failed: ${err}`);
     }
     return res.json();
 }
@@ -381,6 +481,40 @@ export async function generatePromptsFromAnchors(
     return res.json();
 }
 
+export async function resolveSceneCandidates(
+    script: string,
+    scenes: SceneTimelineItem[],
+    llmRerank: boolean = true,
+): Promise<{ scenes: SceneTimelineItem[] }> {
+    const res = await fetch(`${API_URL}/content/resolve-scene-candidates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script, scenes, llm_rerank: llmRerank }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Resolve scene candidates failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function generateSceneAiFallbacks(
+    script: string,
+    scenes: SceneTimelineItem[],
+    maxAiGeneratedScenes: number,
+): Promise<{ scenes: SceneTimelineItem[] }> {
+    const res = await fetch(`${API_URL}/content/generate-scene-ai-fallbacks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script, scenes, max_ai_generated_scenes: maxAiGeneratedScenes }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Generate scene AI fallbacks failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function generateReel(
     episodeId: number | null,
     headline: string,
@@ -392,14 +526,15 @@ export async function generateReel(
     overlayVideoUrl?: string,
     voice: string = 'nova',
     speed: number = 1.0,
-    elevenlabsStability: number = 0.3,
-    elevenlabsSimilarityBoost: number = 0.75,
-    elevenlabsStyle: number = 0.4,
+    elevenlabsStability: number = 0.65,
+    elevenlabsSimilarityBoost: number = 0.85,
+    elevenlabsStyle: number = 0.1,
     ttsProvider: string = 'openai',
     paperId?: number,
     contentType: string = 'latest',
     backgroundClipUrls?: string[],
     anchorTimeline?: { image_url: string, start_time_seconds: number, effect_transition_name?: string }[],
+    sceneTimeline?: SceneTimelineItem[],
     audioUrl?: string,
     wordTimestamps?: { word: string, start: number, end: number }[],
     includeWaveform: boolean = true,
@@ -432,6 +567,7 @@ export async function generateReel(
             ...(overlayVideoUrl ? { overlay_video_url: overlayVideoUrl } : {}),
             ...(backgroundClipUrls?.length ? { background_clip_urls: backgroundClipUrls } : {}),
             ...(anchorTimeline?.length ? { anchor_timeline: anchorTimeline } : {}),
+            ...(sceneTimeline?.length ? { scene_timeline: sceneTimeline } : {}),
             ...(audioUrl ? { audio_url: audioUrl } : {}),
             ...(wordTimestamps?.length ? { word_timestamps: wordTimestamps } : {}),
             include_waveform: includeWaveform,
