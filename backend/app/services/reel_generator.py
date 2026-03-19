@@ -45,6 +45,9 @@ CAPTION_MAX_WORDS = 7
 CAPTION_SOFT_MAX_CHARS = 30
 CAPTION_PAUSE_BREAK_SECONDS = 0.35
 
+DEFAULT_SCENE_HOOK_XFADE_DUR = 0.16
+DEFAULT_SCENE_BODY_XFADE_DUR = 0.38
+
 
 class ReelGenerator:
     """Generates vertical waveform reels for Instagram."""
@@ -720,7 +723,10 @@ class ReelGenerator:
         if scene_asset_specs:
             scene_asset_specs = sorted(scene_asset_specs, key=lambda s: float(s.get("start_time_seconds", 0.0)))
         base_start = float(scene_asset_specs[0].get("start_time_seconds", 0.0)) if scene_asset_specs else 0.0
-        xfade_dur = 0.2
+        max_scene_transition_dur = max(
+            (self._scene_transition_duration(spec.get("effect_transition_name"), False) for spec in scene_asset_specs),
+            default=DEFAULT_SCENE_BODY_XFADE_DUR,
+        )
 
         # Normalize scene starts into a safe relative timeline.
         relative_starts: list[float] = []
@@ -729,7 +735,7 @@ class ReelGenerator:
             relative_starts.append(rel)
 
         if relative_starts:
-            target_span = max(total_duration - xfade_dur - 0.05, 0.5)
+            target_span = max(total_duration - max_scene_transition_dur - 0.05, 0.5)
             max_rel = relative_starts[-1]
             if max_rel > target_span and max_rel > 0:
                 scale = target_span / max_rel
@@ -752,11 +758,12 @@ class ReelGenerator:
             current_rel_start = relative_starts[idx] if idx < len(relative_starts) else 0.0
             next_rel_start = relative_starts[idx + 1] if idx + 1 < len(relative_starts) else total_duration
             duration = max(spec.get("duration", 0.5), max(next_rel_start - current_rel_start, 0.4))
-            is_hook = False
+            is_hook = current_rel_start <= 2.5
+            transition_dur = self._scene_transition_duration(spec.get("effect_transition_name"), is_hook)
             if idx > 0 and idx < len(scene_asset_specs) - 1:
-                duration += xfade_dur
+                duration += transition_dur
             elif idx == len(scene_asset_specs) - 1 and len(scene_asset_specs) > 1:
-                duration += xfade_dur
+                duration += transition_dur
             if idx == len(scene_asset_specs) - 1:
                 # Ensure visuals cover the full narration span; otherwise `-shortest`
                 # cuts the rendered reel early even when audio is longer.
@@ -766,12 +773,15 @@ class ReelGenerator:
             effect_name = spec.get("effect_transition_name")
             label = f"c{idx}"
             if spec.get("asset_type") in {"stock_video", "user_video", "local_video"} and spec.get("path"):
+                scale_dims, crop_x = self._scene_video_motion_crop(effect_name, is_hook)
+                grade_filter = self._scene_video_grade(effect_name, is_hook)
                 parts.append(
                     f"[{input_idx}:v]setpts=PTS-STARTPTS,"
-                    f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},"
+                    f"scale={scale_dims}:force_original_aspect_ratio=increase,"
+                    f"crop={WIDTH}:{HEIGHT}:x='{crop_x}':y='(in_h-out_h)/2',"
                     f"fps={FPS},tpad=stop_mode=clone:stop_duration={duration + 1.0:.2f},"
                     f"trim=duration={duration:.2f},setpts=PTS-STARTPTS,"
-                    f"eq=brightness=-0.08:saturation=1.05,format=yuv420p[{label}]"
+                    f"{grade_filter},format=yuv420p[{label}]"
                 )
                 input_idx += 1
             elif spec.get("asset_type") in {"stock_image", "ai_image", "user_image", "local_image"} and spec.get("path"):
@@ -816,15 +826,17 @@ class ReelGenerator:
             )
             prev = "c0"
             prev_offset = 0.0
-            max_offset = max(total_duration - xfade_dur - 0.01, 0.01)
+            max_offset = max(total_duration - max_scene_transition_dur - 0.01, 0.01)
             for idx in range(1, len(scene_asset_specs)):
                 spec = scene_asset_specs[idx]
-                is_hook = False
+                effect_name = spec.get("effect_transition_name")
                 relative_start = relative_starts[idx] if idx < len(relative_starts) else 0.0
+                is_hook = relative_start <= 2.5
+                xfade_dur = self._scene_transition_duration(effect_name, is_hook)
                 offset = max(0.01, min(relative_start - xfade_dur, max_offset))
                 if offset <= prev_offset:
                     offset = min(max_offset, prev_offset + 0.01)
-                transition = self._map_transition_to_xfade(spec.get("effect_transition_name"), is_hook)
+                transition = self._map_transition_to_xfade(effect_name, is_hook)
                 logger.info(
                     "Scene timeline effect: "
                     f"scene_id={spec.get('scene_id')} "
@@ -832,8 +844,9 @@ class ReelGenerator:
                     f"relative_start={relative_start:.2f} "
                     f"duration={spec.get('duration')} "
                     f"asset_source={spec.get('asset_type')} "
-                    f"effect={spec.get('effect_transition_name') or 'None'} "
-                    f"xfade={transition}"
+                    f"effect={effect_name or 'None'} "
+                    f"xfade={transition} "
+                    f"xfade_dur={xfade_dur:.2f}"
                 )
                 out_label = "bg" if idx == len(scene_asset_specs) - 1 else f"x{idx}"
                 parts.append(f"[{prev}][c{idx}]xfade=transition={transition}:duration={xfade_dur}:offset={offset:.2f}[{out_label}]")
@@ -876,6 +889,101 @@ class ReelGenerator:
             return event.get("effect_transition_name")
         return None
 
+    def _effect_family(self, effect_name: str | None) -> str:
+        families = {
+            "displacement": "glitch",
+            "GlitchMemories": "glitch",
+            "colorphase": "glitch",
+            "SimpleZoom": "zoom",
+            "CrossZoom": "zoom",
+            "squeeze": "zoom",
+            "LinearBlur": "directional",
+            "directionalwarp": "directional",
+            "Dreamy": "dreamy",
+            "fadecolor": "dreamy",
+            "luminance_melt": "organic",
+            "undulatingBurnOut": "impact",
+            "Burn": "impact",
+        }
+        return families.get(effect_name or "", "neutral")
+
+    def _scene_transition_duration(self, effect_name: str | None, is_hook: bool) -> float:
+        family = self._effect_family(effect_name)
+        if is_hook:
+            durations = {
+                "impact": 0.14,
+                "glitch": 0.12,
+                "directional": 0.14,
+                "zoom": 0.15,
+                "dreamy": 0.18,
+                "organic": 0.18,
+                "neutral": DEFAULT_SCENE_HOOK_XFADE_DUR,
+            }
+            return durations.get(family, DEFAULT_SCENE_HOOK_XFADE_DUR)
+
+        durations = {
+            "impact": 0.32,
+            "glitch": 0.28,
+            "directional": 0.34,
+            "zoom": 0.36,
+            "dreamy": 0.5,
+            "organic": 0.46,
+            "neutral": DEFAULT_SCENE_BODY_XFADE_DUR,
+        }
+        return durations.get(family, DEFAULT_SCENE_BODY_XFADE_DUR)
+
+    def _scene_video_motion_crop(self, effect_name: str | None, is_hook: bool) -> tuple[str, str]:
+        family = self._effect_family(effect_name)
+        if is_hook:
+            mapping = {
+                "impact": ("1280:2276", "if(gte(t,0), (in_w-out_w)/2 + 46*sin(t*14), (in_w-out_w)/2)"),
+                "glitch": ("1240:2204", "(in_w-out_w)/2 + 18*sin(t*22)"),
+                "directional": ("1320:2348", "max(0,min(in_w-out_w,(in_w-out_w)/2 + 180 - 260*t))"),
+                "zoom": ("1360:2418", "(in_w-out_w)/2"),
+                "dreamy": ("1216:2162", "(in_w-out_w)/2 + 20*sin(t*2.0)"),
+                "organic": ("1230:2187", "(in_w-out_w)/2 + 16*sin(t*1.6)"),
+                "neutral": ("1220:2169", "(in_w-out_w)/2"),
+            }
+            scale, x_expr = mapping.get(family, mapping["neutral"])
+            return scale, x_expr
+
+        mapping = {
+            "impact": ("1210:2151", "(in_w-out_w)/2 + 26*sin(t*3.8)"),
+            "glitch": ("1190:2116", "(in_w-out_w)/2 + 14*sin(t*10.0)"),
+            "directional": ("1280:2276", "max(0,min(in_w-out_w,(in_w-out_w)/2 + 120*sin(t*0.9)))"),
+            "zoom": ("1300:2311", "(in_w-out_w)/2"),
+            "dreamy": ("1188:2112", "(in_w-out_w)/2 + 18*sin(t*1.5)"),
+            "organic": ("1208:2147", "(in_w-out_w)/2 + 14*sin(t*1.2)"),
+            "neutral": ("1188:2112", "(in_w-out_w)/2"),
+        }
+        scale, x_expr = mapping.get(family, mapping["neutral"])
+        return scale, x_expr
+
+    def _scene_video_grade(self, effect_name: str | None, is_hook: bool) -> str:
+        family = self._effect_family(effect_name)
+        if is_hook:
+            mapping = {
+                "impact": "eq=brightness=0.05:saturation=1.28:contrast=1.22",
+                "glitch": "eq=brightness=-0.02:saturation=1.18:contrast=1.26",
+                "directional": "eq=brightness=-0.03:saturation=1.16:contrast=1.18",
+                "zoom": "eq=brightness=0.00:saturation=1.16:contrast=1.14",
+                "dreamy": "eq=brightness=0.02:saturation=0.98:contrast=1.05",
+                "organic": "eq=brightness=-0.02:saturation=1.10:contrast=1.08",
+                "neutral": "eq=brightness=-0.02:saturation=1.08:contrast=1.08",
+            }
+            return mapping.get(family, mapping["neutral"])
+
+        mapping = {
+            "impact": "eq=brightness=-0.02:saturation=1.16:contrast=1.12",
+            "glitch": "eq=brightness=-0.04:saturation=1.12:contrast=1.18",
+            "directional": "eq=brightness=-0.04:saturation=1.10:contrast=1.10",
+            "zoom": "eq=brightness=-0.03:saturation=1.09:contrast=1.08",
+            "dreamy": "eq=brightness=0.01:saturation=0.94:contrast=1.02",
+            "organic": "eq=brightness=-0.01:saturation=1.03:contrast=1.05",
+            "neutral": "eq=brightness=-0.03:saturation=1.05:contrast=1.06",
+        }
+        return mapping.get(family, mapping["neutral"])
+
     def _map_transition_to_hook_effect(self, effect_name: str | None) -> str | None:
         mapping = {
             "displacement": "shake",
@@ -914,28 +1022,30 @@ class ReelGenerator:
 
     def _map_transition_to_xfade(self, effect_name: str | None, is_hook: bool) -> str:
         mapping = {
-            "displacement": "dissolve",
+            "displacement": "smoothleft",
             "SimpleZoom": "fade",
-            "LinearBlur": "slideleft",
+            "LinearBlur": "wiperight",
             "GlitchMemories": "fadeblack",
-            "luminance_melt": "dissolve",
-            "directionalwarp": "slideright",
-            "CrossZoom": "fade",
-            "Dreamy": "dissolve",
+            "luminance_melt": "distance",
+            "directionalwarp": "smoothright",
+            "CrossZoom": "circleopen",
+            "Dreamy": "fadegrays",
             "undulatingBurnOut": "fadeblack",
             "Burn": "fadewhite",
-            "colorphase": "dissolve",
+            "colorphase": "pixelize",
             "fadecolor": "fade",
-            "squeeze": "fade",
+            "squeeze": "circlecrop",
         }
         if is_hook:
             hook_mapping = {
-                "LinearBlur": "slideleft",
-                "directionalwarp": "slideright",
+                "LinearBlur": "wipeleft",
+                "directionalwarp": "wiperight",
                 "Burn": "fadewhite",
                 "GlitchMemories": "fadeblack",
-                "displacement": "dissolve",
-                "colorphase": "dissolve",
+                "displacement": "hblur",
+                "colorphase": "pixelize",
+                "CrossZoom": "circleopen",
+                "squeeze": "circlecrop",
             }
             return hook_mapping.get(effect_name or "", "fadeblack")
         return mapping.get(effect_name or "", "fade")
