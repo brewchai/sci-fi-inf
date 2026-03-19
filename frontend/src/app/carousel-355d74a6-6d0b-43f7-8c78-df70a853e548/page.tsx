@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight, Film, Sparkles, Award, GripVertical, X, Layers, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, fetchLocalLibraryAssets, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, punctuateTranscript, uploadSceneAsset, resolveSceneCandidates, generateSceneAiFallbacks, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, SceneTimelineItem, API_BASE_URL } from '@/lib/api';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, fetchLocalLibraryAssets, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, punctuateTranscript, uploadSceneAsset, resolveSceneCandidates, generateSceneAiFallbacks, generateSingleSceneAiPrompt, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, SceneTimelineItem, API_BASE_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 const CTA_PRESETS = [
@@ -293,8 +293,10 @@ export default function CarouselGenerator() {
 
     const buildSceneExcerpt = (startTime: number, endTime: number, fallback: string) => {
         if (wordTimestamps.length === 0) return fallback;
+        const safeStart = Math.max(0, startTime - 0.03);
+        const safeEnd = Math.max(endTime, startTime + 0.05);
         const words = wordTimestamps
-            .filter(w => w.start >= Math.max(0, startTime - 0.05) && w.start < Math.max(startTime + 0.05, endTime - 0.05))
+            .filter(w => w.end > safeStart && w.start < safeEnd)
             .map(w => w.word.trim())
             .filter(Boolean);
         return words.join(' ') || fallback;
@@ -393,6 +395,36 @@ export default function CarouselGenerator() {
         });
     };
 
+    const reindexScenes = (scenes: SceneTimelineItem[]) => {
+        if (scenes.length === 0) return scenes;
+        const ordered = scenes
+            .slice()
+            .sort((a, b) => a.start_time_seconds - b.start_time_seconds);
+
+        return ordered.map((scene, idx, arr) => {
+            const nextStart = arr[idx + 1]?.start_time_seconds;
+            const fallbackEnd = timelineDuration > 0
+                ? timelineDuration
+                : wordTimestamps[wordTimestamps.length - 1]?.end ?? scene.end_time_seconds ?? scene.start_time_seconds + 0.5;
+            const endTime = nextStart !== undefined
+                ? Math.max(nextStart, scene.start_time_seconds + 0.01)
+                : Math.max(fallbackEnd, scene.start_time_seconds + 0.5);
+
+            return syncSceneMetadataToTime(
+                {
+                    ...scene,
+                    scene_id: `scene-${idx + 1}`,
+                },
+                scene.start_time_seconds,
+                endTime,
+                {
+                    minTime: idx > 0 ? arr[idx - 1].start_time_seconds + 0.05 : 0,
+                    maxTime: nextStart !== undefined ? nextStart - 0.05 : fallbackEnd,
+                },
+            );
+        });
+    };
+
     const updateTransitionFromTime = (idx: number, rawTime: number) => {
         if (isCustomTab && sceneTimeline.length > 0) {
             let updatedScenesForSync: SceneTimelineItem[] | null = null;
@@ -400,36 +432,13 @@ export default function CarouselGenerator() {
                 if (idx < 0 || idx >= prev.length) return prev;
                 const next = [...prev];
                 const clampedTime = clampTransitionTime(next, idx, rawTime);
-                const previousBound = idx > 0 ? next[idx - 1].start_time_seconds + 0.05 : 0;
-                const nextBound = idx < next.length - 1 ? next[idx + 1].start_time_seconds - 0.05 : timelineDuration;
                 next[idx] = {
                     ...next[idx],
                     start_time_seconds: clampedTime,
                 };
-                if (idx > 0) {
-                    next[idx - 1] = syncSceneMetadataToTime(
-                        next[idx - 1],
-                        next[idx - 1].start_time_seconds,
-                        clampedTime,
-                    );
-                }
-                if (idx < next.length - 1) {
-                    next[idx] = syncSceneMetadataToTime(
-                        next[idx],
-                        clampedTime,
-                        next[idx + 1].start_time_seconds,
-                        { minTime: previousBound, maxTime: nextBound },
-                    );
-                } else {
-                    next[idx] = syncSceneMetadataToTime(
-                        next[idx],
-                        clampedTime,
-                        Math.max(next[idx].end_time_seconds, clampedTime + 0.5),
-                        { minTime: previousBound, maxTime: nextBound },
-                    );
-                }
-                updatedScenesForSync = next;
-                return next;
+                const synced = reindexScenes(next);
+                updatedScenesForSync = synced;
+                return synced;
             });
             if (updatedScenesForSync) {
                 syncAnchorWordsFromScenes(updatedScenesForSync);
@@ -496,24 +505,6 @@ export default function CarouselGenerator() {
         scenePromptDraftRef.current = nextDrafts;
     }, [sceneTimeline]);
 
-    const reindexScenes = (scenes: SceneTimelineItem[]) => {
-        if (scenes.length === 0) return scenes;
-        return scenes
-            .slice()
-            .sort((a, b) => a.start_time_seconds - b.start_time_seconds)
-            .map((scene, idx, arr) => {
-                const nextStart = arr[idx + 1]?.start_time_seconds;
-                const endTime = nextStart !== undefined
-                    ? Math.max(nextStart, scene.start_time_seconds + 0.01)
-                    : Math.max(scene.end_time_seconds || 0, scene.start_time_seconds + 0.5);
-                return {
-                    ...scene,
-                    scene_id: `scene-${idx + 1}`,
-                    end_time_seconds: endTime,
-                };
-            });
-    };
-
     const syncAnchorWordsFromScenes = (scenes: SceneTimelineItem[]) => {
         setAnchorWords(scenes.map(scene => ({
             word: scene.anchor_word,
@@ -532,7 +523,7 @@ export default function CarouselGenerator() {
         caption_is_custom: scene.caption_is_custom ?? false,
     });
 
-    const normalizeSceneTimeline = (scenes: SceneTimelineItem[]) => scenes.map(normalizeSceneTimelineItem);
+    const normalizeSceneTimeline = (scenes: SceneTimelineItem[]) => reindexScenes(scenes.map(normalizeSceneTimelineItem));
 
     const deleteScene = (sceneId: string) => {
         setSceneTimeline(prev => {
@@ -555,7 +546,6 @@ export default function CarouselGenerator() {
             let anchorWord = "New scene";
             let startTime = targetTime;
             let endTime = Math.min(targetTime + 1.0, nextBoundary);
-            let transcriptExcerpt = "New scene";
             if (wordTimestamps.length > 0) {
                 const closest = wordTimestamps.reduce((best, item) => (
                     Math.abs(item.start - targetTime) < Math.abs(best.start - targetTime) ? item : best
@@ -563,18 +553,17 @@ export default function CarouselGenerator() {
                 anchorWord = closest.word;
                 startTime = closest.start;
                 endTime = closest.end;
-                transcriptExcerpt = closest.word;
             }
 
             const insertion: SceneTimelineItem = {
                 scene_id: "scene-new",
                 anchor_word: anchorWord,
                 visual_focus_word: anchorWord,
-                anchor_phrase: transcriptExcerpt,
+                anchor_phrase: anchorWord,
                 start_time_seconds: startTime,
                 end_time_seconds: endTime,
-                transcript_excerpt: transcriptExcerpt,
-                caption_text: buildSceneCaptionSuggestion(transcriptExcerpt, transcriptExcerpt, anchorWord),
+                transcript_excerpt: anchorWord,
+                caption_text: buildSceneCaptionSuggestion(anchorWord, anchorWord, anchorWord),
                 caption_is_custom: false,
                 effect_transition_name: current.effect_transition_name,
                 search_queries: [],
@@ -618,7 +607,6 @@ export default function CarouselGenerator() {
             let anchorWord = "New scene";
             let startTime = targetTime;
             let endTime = Math.min(targetTime + 1.0, maxBound > targetTime ? maxBound : targetTime + 1.0);
-            let transcriptExcerpt = "New scene";
             if (wordTimestamps.length > 0) {
                 const closest = wordTimestamps.reduce((best, item) => (
                     Math.abs(item.start - targetTime) < Math.abs(best.start - targetTime) ? item : best
@@ -626,18 +614,17 @@ export default function CarouselGenerator() {
                 anchorWord = closest.word;
                 startTime = closest.start;
                 endTime = closest.end;
-                transcriptExcerpt = closest.word;
             }
 
             const insertion: SceneTimelineItem = {
                 scene_id: "scene-new",
                 anchor_word: anchorWord,
                 visual_focus_word: anchorWord,
-                anchor_phrase: transcriptExcerpt,
+                anchor_phrase: anchorWord,
                 start_time_seconds: startTime,
                 end_time_seconds: endTime,
-                transcript_excerpt: transcriptExcerpt,
-                caption_text: buildSceneCaptionSuggestion(transcriptExcerpt, transcriptExcerpt, anchorWord),
+                transcript_excerpt: anchorWord,
+                caption_text: buildSceneCaptionSuggestion(anchorWord, anchorWord, anchorWord),
                 caption_is_custom: false,
                 effect_transition_name: previousScene?.effect_transition_name || nextScene?.effect_transition_name,
                 search_queries: [],
@@ -2914,59 +2901,6 @@ export default function CarouselGenerator() {
                                                         </div>
                                                     </div>
 
-                                                    <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}>
-                                                        <div>
-                                                            <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#fff' }}>Anchor Words</h4>
-                                                            <p style={{ margin: '0.3rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                                                Scene switches move freely. These labels stay synced to the nearest spoken word for reference.
-                                                            </p>
-                                                        </div>
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
-                                                            {sceneTimeline.map((scene, idx) => (
-                                                                <div key={scene.scene_id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.7rem', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.86rem' }}>
-                                                                    <span style={{ opacity: 0.5, fontSize: '0.72rem', fontWeight: 700 }}>{idx + 1}</span>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={scene.anchor_word}
-                                                                        onChange={(e) => {
-                                                                            const rawValue = e.target.value;
-                                                                            const val = rawValue.trim();
-                                                                            setSceneTimeline(prev => prev.map((item) => {
-                                                                                if (item.scene_id !== scene.scene_id) return item;
-                                                                                let start = item.start_time_seconds;
-                                                                                let end = item.end_time_seconds;
-                                                                                if (val && wordTimestamps.length > 0) {
-                                                                                    const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                                                                    const normVal = normalise(val);
-                                                                                    const matches = wordTimestamps.filter(w => normalise(w.word) === normVal);
-                                                                                    if (matches.length > 0) {
-                                                                                        const totalDuration = wordTimestamps[wordTimestamps.length - 1].end;
-                                                                                        const idealTime = (idx / Math.max(prev.length - 1, 1)) * totalDuration;
-                                                                                        const best = matches.reduce((a, b) =>
-                                                                                            Math.abs(a.start - idealTime) <= Math.abs(b.start - idealTime) ? a : b
-                                                                                        );
-                                                                                        start = best.start;
-                                                                                        end = best.end;
-                                                                                    }
-                                                                                }
-                                                                                return { ...item, anchor_word: rawValue, start_time_seconds: start, end_time_seconds: end };
-                                                                            }));
-                                                                            setAnchorWords(prev => prev.map((item, itemIdx) => itemIdx === idx ? {
-                                                                                ...item,
-                                                                                word: rawValue,
-                                                                                start_time_seconds: sceneTimeline[idx]?.start_time_seconds ?? item.start_time_seconds,
-                                                                                end_time_seconds: sceneTimeline[idx]?.end_time_seconds ?? item.end_time_seconds,
-                                                                            } : item));
-                                                                        }}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontWeight: 600, width: '96px', outline: 'none' }}
-                                                                    />
-                                                                    <span style={{ opacity: 0.45, fontSize: '0.76rem' }}>{scene.start_time_seconds.toFixed(2)}s</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-
                                                     {timelineDuration > 0 && (
                                                         <div className={styles.transitionEditor}>
                                                             <div className={styles.transitionEditorHeader}>
@@ -3364,12 +3298,11 @@ export default function CarouselGenerator() {
                                                                                         if (!currentScene) return;
                                                                                         setGeneratingPromptSceneId(scene.scene_id);
                                                                                         try {
-                                                                                            const semanticSeed = currentScene.visual_focus_word || currentScene.anchor_phrase || currentScene.anchor_word;
-                                                                                            const promptSeed = `${semanticSeed}. ${currentScene.transcript_excerpt || ''}`.trim();
-                                                                                            const result = await generateImagePrompt(promptSeed);
+                                                                                            const result = await generateSingleSceneAiPrompt(reelScript, currentScene);
                                                                                             setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
                                                                                                 ...item,
                                                                                                 ai_prompt: result.prompt,
+                                                                                                effect_transition_name: result.effect_transition_name || item.effect_transition_name,
                                                                                                 scene_state: item.asset_source === 'none' ? 'ai_eligible' : item.scene_state,
                                                                                             } : item));
                                                                                             scenePromptDraftRef.current[scene.scene_id] = result.prompt;

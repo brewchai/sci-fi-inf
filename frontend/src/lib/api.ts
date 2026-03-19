@@ -517,6 +517,22 @@ export async function generateSceneAiFallbacks(
     return res.json();
 }
 
+export async function generateSingleSceneAiPrompt(
+    script: string,
+    scene: SceneTimelineItem,
+): Promise<{ prompt: string; effect_transition_name?: string | null }> {
+    const res = await fetch(`${API_URL}/content/generate-single-scene-ai-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script, scene }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Generate single scene AI prompt failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function generateReel(
     episodeId: number | null,
     headline: string,

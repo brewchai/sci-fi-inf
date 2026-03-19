@@ -1224,6 +1224,46 @@ async def generate_scene_ai_fallbacks(request: GenerateSceneAIFallbacksRequest):
     return GenerateSceneAIFallbacksResponse(scenes=updated_scenes)
 
 
+class GenerateSingleSceneAIPromptRequest(BaseModel):
+    script: str = Field(..., description="Narration script or transcript backing the scene")
+    scene: SceneTimelineItem
+
+
+class GenerateSingleSceneAIPromptResponse(BaseModel):
+    prompt: str
+    effect_transition_name: Optional[str] = None
+
+
+@router.post("/generate-single-scene-ai-prompt", response_model=GenerateSingleSceneAIPromptResponse)
+async def generate_single_scene_ai_prompt(request: GenerateSingleSceneAIPromptRequest):
+    """Generate one scene-aware AI image prompt using full-script context plus the current scene."""
+    from app.services.anchor_selector import AnchorSelector
+
+    scene = request.scene
+    selector = AnchorSelector()
+    anchors = [{
+        "word": scene.anchor_word,
+        "start": scene.start_time_seconds,
+        "end": scene.end_time_seconds,
+        "focus_word": scene.visual_focus_word or scene.anchor_word,
+        "anchor_phrase": scene.anchor_phrase or scene.transcript_excerpt or scene.anchor_word,
+        "effect_transition_name": scene.effect_transition_name,
+    }]
+    prompt_rows = await selector.generate_prompts(request.script, anchors)
+    if not prompt_rows:
+        raise HTTPException(status_code=500, detail="Failed to generate scene AI prompt")
+
+    row = prompt_rows[0]
+    prompt = str(row.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=500, detail="Generated scene AI prompt was empty")
+
+    return GenerateSingleSceneAIPromptResponse(
+        prompt=prompt,
+        effect_transition_name=row.get("effect_transition_name") or scene.effect_transition_name,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Reel generation from a content-engine paper
 # ---------------------------------------------------------------------------
