@@ -465,6 +465,9 @@ async def search_scene_candidates(
     include_local_candidates: bool = True,
     max_queries_per_scene: int = 3,
     max_candidates_per_scene: int = 7,
+    explicit_queries_by_scene: dict[str, list[str]] | None = None,
+    video_results_per_query: int = 3,
+    image_results_per_query: int = 3,
 ) -> dict[str, list[dict]]:
     """Return ranked stock image/video candidates keyed by scene id."""
     if not scenes:
@@ -488,7 +491,7 @@ async def search_scene_candidates(
 
     api_key = settings.PEXELS_API_KEY
 
-    queries_by_scene = await extract_scene_search_queries(
+    queries_by_scene = explicit_queries_by_scene or await extract_scene_search_queries(
         scenes,
         full_script=full_script,
         max_queries=max_queries_per_scene,
@@ -522,12 +525,12 @@ async def search_scene_candidates(
                 try:
                     video_resp = await client.get(
                         PEXELS_VIDEO_SEARCH_URL,
-                        params={"query": query, "per_page": 5, "orientation": "portrait", "size": "medium"},
+                        params={"query": query, "per_page": max(5, video_results_per_query), "orientation": "portrait", "size": "medium"},
                         headers=headers,
                     )
                     video_resp.raise_for_status()
                     video_data = video_resp.json()
-                    for idx, video in enumerate(video_data.get("videos", [])[:3]):
+                    for idx, video in enumerate(video_data.get("videos", [])[:video_results_per_query]):
                         best_file = _pick_best_video_file(video.get("video_files", []))
                         if not best_file:
                             continue
@@ -564,12 +567,12 @@ async def search_scene_candidates(
                     try:
                         image_resp = await client.get(
                             PEXELS_IMAGE_SEARCH_URL,
-                            params={"query": query, "per_page": 5, "orientation": "portrait", "size": "medium"},
+                            params={"query": query, "per_page": max(5, image_results_per_query), "orientation": "portrait", "size": "medium"},
                             headers=headers,
                         )
                         image_resp.raise_for_status()
                         image_data = image_resp.json()
-                        for idx, photo in enumerate(image_data.get("photos", [])[:3]):
+                        for idx, photo in enumerate(image_data.get("photos", [])[:image_results_per_query]):
                             src = photo.get("src", {}) or {}
                             asset_url = src.get("large2x") or src.get("large") or src.get("original")
                             thumbnail_url = src.get("medium") or src.get("small") or asset_url

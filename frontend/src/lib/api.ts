@@ -533,6 +533,23 @@ export async function generateSingleSceneAiPrompt(
     return res.json();
 }
 
+export async function refetchSceneCandidates(
+    script: string,
+    scene: SceneTimelineItem,
+    queries: string[],
+): Promise<{ scene: SceneTimelineItem }> {
+    const res = await fetch(`${API_URL}/content/refetch-scene-candidates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script, scene, queries }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Refetch scene candidates failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function generateReel(
     episodeId: number | null,
     headline: string,

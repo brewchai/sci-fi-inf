@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { Download, Loader2, RefreshCw, FileText, Copy, Check, ArrowRight, Film, Sparkles, Award, GripVertical, X, Layers, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, fetchLocalLibraryAssets, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, punctuateTranscript, uploadSceneAsset, resolveSceneCandidates, generateSceneAiFallbacks, generateSingleSceneAiPrompt, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, SceneTimelineItem, API_BASE_URL } from '@/lib/api';
+import { fetchEpisodeDates, fetchEpisodeBySlug, fetchPapers, fetchPaperCarouselContent, generateReel, generateReelScript, extractVisualQueries, fetchVisuals, fetchLocalLibraryAssets, extractScenePrompts, compileAudioTimeline, generatePromptsFromAnchors, fetchTopPapers, fetchTopScientists, fetchDailyScience, analyzeTopPapers, analyzeDailyScience, generateImagePrompt, generateImage, fetchImageStyles, rewriteVoiceScript, punctuateTranscript, uploadSceneAsset, resolveSceneCandidates, generateSceneAiFallbacks, generateSingleSceneAiPrompt, refetchSceneCandidates, EpisodeDate, PodcastEpisode, Paper, CarouselSlide, ImpactAnalysis, VisualClip, TimelinePrompt, AnchorWord, WordTimestamp, ImageStyle, SceneTimelineItem, API_BASE_URL } from '@/lib/api';
 import styles from './page.module.css';
 
 const CTA_PRESETS = [
@@ -30,6 +30,7 @@ export default function CarouselGenerator() {
     const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
     const transitionTimelineRef = useRef<HTMLDivElement | null>(null);
     const scenePromptDraftRef = useRef<Record<string, string>>({});
+    const sceneQueryDraftRef = useRef<Record<string, string>>({});
 
     const [episodesList, setEpisodesList] = useState<EpisodeDate[]>([]);
     const [selectedSlug, setSelectedSlug] = useState<string>('');
@@ -76,6 +77,7 @@ export default function CarouselGenerator() {
     const [resolvingSceneCandidates, setResolvingSceneCandidates] = useState(false);
     const [generatingSceneAi, setGeneratingSceneAi] = useState(false);
     const [generatingPromptSceneId, setGeneratingPromptSceneId] = useState<string | null>(null);
+    const [refetchingSceneCandidatesId, setRefetchingSceneCandidatesId] = useState<string | null>(null);
     const [maxAiGeneratedScenes, setMaxAiGeneratedScenes] = useState(3);
     const [sceneFilter, setSceneFilter] = useState<'all' | 'unresolved' | 'ai-eligible'>('all');
 
@@ -307,41 +309,8 @@ export default function CarouselGenerator() {
         anchorPhrase: string = '',
         focusWord: string = '',
     ) => {
-        const source = (anchorPhrase || transcriptExcerpt || focusWord || '').trim();
-        if (!source) return '';
-
-        const tokens = source
-            .replace(/\n/g, ' ')
-            .split(/\s+/)
-            .map(token => token.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, ''))
-            .filter(Boolean);
-        if (tokens.length === 0) return '';
-
-        const leadingFillers = new Set([
-            'i', 'we', 'you', 'they', 'he', 'she', 'it',
-            'was', 'were', 'am', 'is', 'are', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'did', 'does',
-            'to', 'that', 'just', 'really', 'kind', 'sort',
-        ]);
-        while (tokens.length > 2 && leadingFillers.has(tokens[0].toLowerCase())) {
-            tokens.shift();
-        }
-
-        const lowered = tokens.map(token => token.toLowerCase());
-        const toIdx = lowered.indexOf('to');
-        if (toIdx >= 0) {
-            const tail = tokens.slice(toIdx + 1);
-            if (tail.length >= 1 && tail.length <= 4) return tail.join(' ');
-        }
-
-        const forIdx = lowered.indexOf('for');
-        if (forIdx >= 0) {
-            const tail = tokens.slice(Math.max(0, forIdx - 1));
-            if (tail.length >= 2 && tail.length <= 4) return tail.join(' ');
-        }
-
-        if (tokens.length <= 4) return tokens.join(' ');
-        return tokens.slice(-3).join(' ');
+        const source = (transcriptExcerpt || anchorPhrase || focusWord || '').replace(/\s+/g, ' ').trim();
+        return source;
     };
 
     const syncSceneMetadataToTime = (
@@ -503,6 +472,16 @@ export default function CarouselGenerator() {
             nextDrafts[scene.scene_id] = scene.ai_prompt || "";
         }
         scenePromptDraftRef.current = nextDrafts;
+    }, [sceneTimeline]);
+
+    useEffect(() => {
+        const nextDrafts: Record<string, string> = { ...sceneQueryDraftRef.current };
+        for (const scene of sceneTimeline) {
+            if (!nextDrafts[scene.scene_id]?.trim()) {
+                nextDrafts[scene.scene_id] = (scene.search_queries || []).join(', ');
+            }
+        }
+        sceneQueryDraftRef.current = nextDrafts;
     }, [sceneTimeline]);
 
     const syncAnchorWordsFromScenes = (scenes: SceneTimelineItem[]) => {
@@ -2694,29 +2673,6 @@ export default function CarouselGenerator() {
                                                         {extractingTimeline ? 'Compiling Audio & Timeline...' : audioSourceMode === 'tts' ? 'Compile Voice & Timeline' : 'Transcribe Upload & Build Timeline'}
                                                     </button>
                                                 </div>
-                                                {audioPreviewUrl && (
-                                                    <div style={{ padding: '1rem', background: '#111', borderRadius: '10px', border: '1px solid #333' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                                                            <div>
-                                                                <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--accent)' }}>Audio Ready</h4>
-                                                                <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                                    Listen here first. Then move into anchor review, prompt writing, and image generation.
-                                                                </p>
-                                                            </div>
-                                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.3rem 0.55rem', borderRadius: '999px', background: 'rgba(255,255,255,0.04)' }}>
-                                                                {reelDuration}s compiled
-                                                            </span>
-                                                        </div>
-                                                        <audio
-                                                            ref={audioPreviewRef}
-                                                            controls
-                                                            src={audioPreviewUrl.startsWith('/') ? `${API_BASE_URL.replace('/api/v1', '')}${audioPreviewUrl}` : audioPreviewUrl}
-                                                            style={{ width: '100%', height: '40px' }}
-                                                            onTimeUpdate={(e) => setAudioPreviewCurrentTime(e.currentTarget.currentTime)}
-                                                            onLoadedMetadata={(e) => setAudioPreviewDuration(e.currentTarget.duration || 0)}
-                                                        />
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
                                     ) : (
@@ -2866,39 +2822,6 @@ export default function CarouselGenerator() {
                                                                 Scene timing follows the voice-over. Drag markers to retime cuts before choosing visuals.
                                                             </p>
                                                         </div>
-                                                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={async () => {
-                                                                    setResolvingSceneCandidates(true);
-                                                                    try {
-                                                                        const result = await resolveSceneCandidates(reelScript, sceneTimeline);
-                                                                        setSceneTimeline(normalizeSceneTimeline(result.scenes));
-                                                                        setSceneFilter('all');
-                                                                    } catch (err: any) {
-                                                                        setReelError(err.message || 'Failed to fetch scene candidates');
-                                                                    } finally {
-                                                                        setResolvingSceneCandidates(false);
-                                                                    }
-                                                                }}
-                                                                disabled={resolvingSceneCandidates}
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '0.45rem',
-                                                                    padding: '0.65rem 1rem',
-                                                                    borderRadius: '8px',
-                                                                    border: '1px solid var(--accent)',
-                                                                    background: 'rgba(100, 255, 218, 0.08)',
-                                                                    color: 'var(--accent)',
-                                                                    fontWeight: 600,
-                                                                    cursor: resolvingSceneCandidates ? 'wait' : 'pointer',
-                                                                }}
-                                                            >
-                                                                {resolvingSceneCandidates ? <Loader2 size={16} className={styles.spinAnimation} /> : <Layers size={16} />}
-                                                                {resolvingSceneCandidates ? 'Matching Stock Candidates...' : 'Step 3: Fetch Stock Picks'}
-                                                            </button>
-                                                        </div>
                                                     </div>
 
                                                     {timelineDuration > 0 && (
@@ -2985,6 +2908,27 @@ export default function CarouselGenerator() {
                                                             </div>
                                                         </div>
                                                     )}
+
+                                                    {audioPreviewUrl && (
+                                                        <div style={{ marginTop: '0.9rem', padding: '0.9rem 1rem', background: 'rgba(6, 14, 11, 0.72)', borderRadius: '10px', border: '1px solid rgba(100, 255, 218, 0.16)' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                                                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                                    Playback for scene timing
+                                                                </div>
+                                                                <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', padding: '0.26rem 0.55rem', borderRadius: '999px', background: 'rgba(255,255,255,0.04)' }}>
+                                                                    {reelDuration}s compiled
+                                                                </span>
+                                                            </div>
+                                                            <audio
+                                                                ref={audioPreviewRef}
+                                                                controls
+                                                                src={audioPreviewUrl.startsWith('/') ? `${API_BASE_URL.replace('/api/v1', '')}${audioPreviewUrl}` : audioPreviewUrl}
+                                                                style={{ width: '100%', height: '40px' }}
+                                                                onTimeUpdate={(e) => setAudioPreviewCurrentTime(e.currentTarget.currentTime)}
+                                                                onLoadedMetadata={(e) => setAudioPreviewDuration(e.currentTarget.duration || 0)}
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div style={{ padding: '1.25rem', background: 'var(--bg-tertiary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
@@ -2998,6 +2942,37 @@ export default function CarouselGenerator() {
                                                             </p>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    setResolvingSceneCandidates(true);
+                                                                    try {
+                                                                        const result = await resolveSceneCandidates(reelScript, sceneTimeline);
+                                                                        setSceneTimeline(normalizeSceneTimeline(result.scenes));
+                                                                        setSceneFilter('all');
+                                                                    } catch (err: any) {
+                                                                        setReelError(err.message || 'Failed to fetch scene candidates');
+                                                                    } finally {
+                                                                        setResolvingSceneCandidates(false);
+                                                                    }
+                                                                }}
+                                                                disabled={resolvingSceneCandidates}
+                                                                style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.45rem',
+                                                                    padding: '0.65rem 1rem',
+                                                                    borderRadius: '8px',
+                                                                    border: '1px solid var(--accent)',
+                                                                    background: 'rgba(100, 255, 218, 0.08)',
+                                                                    color: 'var(--accent)',
+                                                                    fontWeight: 600,
+                                                                    cursor: resolvingSceneCandidates ? 'wait' : 'pointer',
+                                                                }}
+                                                            >
+                                                                {resolvingSceneCandidates ? <Loader2 size={16} className={styles.spinAnimation} /> : <Layers size={16} />}
+                                                                {resolvingSceneCandidates ? 'Matching Stock Candidates...' : 'Fetch Stock Picks'}
+                                                            </button>
                                                             <div>
                                                                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>Scene filter</label>
                                                                 <select
@@ -3010,48 +2985,6 @@ export default function CarouselGenerator() {
                                                                     <option value="ai-eligible">AI-eligible only</option>
                                                                 </select>
                                                             </div>
-                                                            <div>
-                                                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>AI scene cap</label>
-                                                                <input
-                                                                    type="number"
-                                                                    min={0}
-                                                                    max={20}
-                                                                    value={maxAiGeneratedScenes}
-                                                                    onChange={(e) => setMaxAiGeneratedScenes(Number(e.target.value) || 0)}
-                                                                    style={{ width: '96px', padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                                                />
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={async () => {
-                                                                    setGeneratingSceneAi(true);
-                                                                    try {
-                                                                        const result = await generateSceneAiFallbacks(reelScript, sceneTimeline, maxAiGeneratedScenes);
-                                                                        setSceneTimeline(normalizeSceneTimeline(result.scenes));
-                                                                        setSceneFilter('ai-eligible');
-                                                                    } catch (err: any) {
-                                                                        setReelError(err.message || 'Failed to build AI fallback prompts');
-                                                                    } finally {
-                                                                        setGeneratingSceneAi(false);
-                                                                    }
-                                                                }}
-                                                                disabled={generatingSceneAi}
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '0.45rem',
-                                                                    padding: '0.65rem 1rem',
-                                                                    borderRadius: '8px',
-                                                                    border: 'none',
-                                                                    background: 'var(--accent)',
-                                                                    color: '#000',
-                                                                    fontWeight: 600,
-                                                                    cursor: generatingSceneAi ? 'wait' : 'pointer',
-                                                                }}
-                                                            >
-                                                                {generatingSceneAi ? <Loader2 size={16} className={styles.spinAnimation} /> : <Sparkles size={16} />}
-                                                                {generatingSceneAi ? 'Generating AI Fallbacks...' : 'Step 4: Create AI Fill-Ins'}
-                                                            </button>
                                                         </div>
                                                     </div>
 
@@ -3112,11 +3045,7 @@ export default function CarouselGenerator() {
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
-                                                                                        const suggested = buildSceneCaptionSuggestion(
-                                                                                            scene.transcript_excerpt || scene.anchor_phrase || scene.anchor_word,
-                                                                                            scene.anchor_phrase || scene.transcript_excerpt || scene.anchor_word,
-                                                                                            scene.visual_focus_word || scene.anchor_word,
-                                                                                        );
+                                                                                        const suggested = (scene.transcript_excerpt || '').replace(/\s+/g, ' ').trim();
                                                                                         setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
                                                                                             ...item,
                                                                                             caption_text: suggested,
@@ -3125,7 +3054,7 @@ export default function CarouselGenerator() {
                                                                                     }}
                                                                                     style={{ padding: '0.2rem 0.5rem', borderRadius: '999px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer' }}
                                                                                 >
-                                                                                    Reset auto text
+                                                                                    Reset to scene voice-over
                                                                                 </button>
                                                                             </div>
                                                                             <textarea
@@ -3143,18 +3072,9 @@ export default function CarouselGenerator() {
                                                                                 style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: '#f3f3f3', resize: 'vertical', fontSize: '0.84rem', lineHeight: 1.45 }}
                                                                             />
                                                                             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                                                                                Auto-filled from the narration for this scene. Edit it freely and the final video will use your version.
+                                                                                Defaults to the exact narration covered by this scene. Edit it freely and the final video will use your version.
                                                                             </div>
                                                                         </div>
-                                                                        {scene.search_queries.length > 0 && (
-                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                                                                {scene.search_queries.map(query => (
-                                                                                    <span key={query} style={{ fontSize: '0.72rem', border: '1px solid #333', borderRadius: '999px', padding: '0.25rem 0.55rem', color: 'var(--text-secondary)' }}>
-                                                                                        {query}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
                                                                         <div style={{ display: 'grid', gap: '0.35rem' }}>
                                                                             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                                                                 Pick from local library (manual override)
@@ -3178,7 +3098,7 @@ export default function CarouselGenerator() {
                                                                                         scene_state: 'resolved_by_library',
                                                                                     } : item));
                                                                                 }}
-                                                                                style={{ width: '100%', padding: '0.55rem 0.7rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: '#ddd', fontSize: '0.78rem' }}
+                                                                                style={{ width: '100%', maxWidth: '340px', padding: '0.42rem 0.6rem', borderRadius: '8px', border: '1px solid #333', background: '#111', color: '#ddd', fontSize: '0.74rem' }}
                                                                             >
                                                                                 <option value="">
                                                                                     {loadingLocalLibraryAssets ? 'Loading local assets...' : 'Select local asset...'}
@@ -3190,58 +3110,124 @@ export default function CarouselGenerator() {
                                                                                 ))}
                                                                             </select>
                                                                         </div>
-                                                                        {scene.stock_candidates.length > 0 && (
-                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
-                                                                                {scene.stock_candidates.map(candidate => (
-                                                                                    <button
-                                                                                        key={candidate.candidate_id}
-                                                                                        type="button"
-                                                                                        onClick={() => {
-                                                                                            const nextSceneState = candidate.type.startsWith('local_')
-                                                                                                ? 'resolved_by_library'
-                                                                                                : 'resolved_by_stock';
+                                                                        {(scene.stock_candidates.length > 0 || scene.search_queries.length > 0) && (
+                                                                            <div style={{ display: 'grid', gap: '0.75rem', padding: '0.8rem', borderRadius: '10px', border: '1px solid #2f3f3a', background: 'rgba(100, 255, 218, 0.03)' }}>
+                                                                                <div style={{ display: 'grid', gap: '0.4rem' }}>
+                                                                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                                        Stock search queries
+                                                                                    </label>
+                                                                                    <textarea
+                                                                                        value={sceneQueryDraftRef.current[scene.scene_id] ?? scene.search_queries.join(', ')}
+                                                                                        onChange={(e) => {
+                                                                                            sceneQueryDraftRef.current[scene.scene_id] = e.target.value;
                                                                                             setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
                                                                                                 ...item,
-                                                                                                selected_asset: {
-                                                                                                    asset_source: candidate.type,
-                                                                                                    asset_url: candidate.asset_url,
-                                                                                                    thumbnail_url: candidate.thumbnail_url,
-                                                                                                    candidate_id: candidate.candidate_id,
-                                                                                                },
-                                                                                                asset_source: candidate.type,
-                                                                                                scene_state: nextSceneState,
+                                                                                                search_queries: e.target.value.split(',').map(part => part.trim()).filter(Boolean),
                                                                                             } : item));
                                                                                         }}
-                                                                                        style={{ border: scene.selected_asset?.candidate_id === candidate.candidate_id ? '1px solid var(--accent)' : '1px solid #333', background: '#121212', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                                                                                        rows={2}
+                                                                                        placeholder="e.g. brain scan lab, futuristic neuroscience, scientist analyzing data"
+                                                                                        style={{ width: '100%', padding: '0.6rem 0.7rem', borderRadius: '8px', border: '1px solid #2d3a36', background: '#101413', color: '#e9f1ee', resize: 'vertical', fontSize: '0.78rem', lineHeight: 1.45 }}
+                                                                                    />
+                                                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                                                                        Use comma-separated queries. Per-scene refetch returns up to 10 stock results and stays video-first when matches exist.
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={async () => {
+                                                                                            const currentScene = sceneTimeline.find(item => item.scene_id === scene.scene_id);
+                                                                                            if (!currentScene) return;
+                                                                                            const parsedQueries = (sceneQueryDraftRef.current[scene.scene_id] || '')
+                                                                                                .split(',')
+                                                                                                .map(part => part.trim())
+                                                                                                .filter(Boolean);
+                                                                                            if (parsedQueries.length === 0) {
+                                                                                                alert('Enter at least one stock search query.');
+                                                                                                return;
+                                                                                            }
+                                                                                            setRefetchingSceneCandidatesId(scene.scene_id);
+                                                                                            try {
+                                                                                                const result = await refetchSceneCandidates(reelScript, currentScene, parsedQueries);
+                                                                                                sceneQueryDraftRef.current[scene.scene_id] = parsedQueries.join(', ');
+                                                                                                setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? result.scene : item));
+                                                                                            } catch (err: any) {
+                                                                                                alert(err?.message || 'Failed to refetch stock for scene');
+                                                                                            } finally {
+                                                                                                setRefetchingSceneCandidatesId(null);
+                                                                                            }
+                                                                                        }}
+                                                                                        disabled={refetchingSceneCandidatesId === scene.scene_id}
+                                                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.8rem', borderRadius: '8px', border: '1px solid var(--accent)', background: 'rgba(100, 255, 218, 0.08)', color: 'var(--accent)', cursor: refetchingSceneCandidatesId === scene.scene_id ? 'wait' : 'pointer', fontWeight: 600, fontSize: '0.76rem' }}
                                                                                     >
-                                                                                        <div style={{ aspectRatio: '9 / 16', background: '#1a1a1a', position: 'relative' }}>
-                                                                                            {isVideoAssetType(candidate.type) ? (
-                                                                                                <video
-                                                                                                    src={resolveAssetUrl(candidate.asset_url)}
-                                                                                                    poster={resolveAssetUrl(candidate.thumbnail_url)}
-                                                                                                    controls
-                                                                                                    muted
-                                                                                                    playsInline
-                                                                                                    preload="metadata"
-                                                                                                    onClick={(event) => event.stopPropagation()}
-                                                                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000' }}
-                                                                                                />
-                                                                                            ) : (
-                                                                                                <img src={resolveAssetUrl(candidate.thumbnail_url)} alt={candidate.query} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                                                            )}
-                                                                                            <div style={{ position: 'absolute', top: '0.4rem', left: '0.4rem', background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: '0.66rem', fontWeight: 700, padding: '0.2rem 0.45rem', borderRadius: '999px', pointerEvents: 'none' }}>
-                                                                                                {isVideoAssetType(candidate.type) ? 'VIDEO' : 'IMAGE'}
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div style={{ padding: '0.5rem' }}>
-                                                                                            <div style={{ fontSize: '0.72rem', color: '#fff', fontWeight: 600 }}>{describeCandidateType(candidate.type)}</div>
-                                                                                            <div style={{ fontSize: '0.68rem', color: '#888', marginTop: '0.2rem' }}>{candidate.query}</div>
-                                                                                            <div style={{ fontSize: '0.66rem', color: '#777', marginTop: '0.2rem' }}>
-                                                                                                {candidate.source_provider} • score {candidate.score.toFixed(1)}
-                                                                                            </div>
-                                                                                        </div>
+                                                                                        {refetchingSceneCandidatesId === scene.scene_id ? <Loader2 size={13} className={styles.spinAnimation} /> : <RefreshCw size={13} />}
+                                                                                        {refetchingSceneCandidatesId === scene.scene_id ? 'Fetching stock...' : 'Refetch stock for scene'}
                                                                                     </button>
-                                                                                ))}
+                                                                                    {scene.search_queries.length > 0 && (
+                                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                                                                            {scene.search_queries.map(query => (
+                                                                                                <span key={query} style={{ fontSize: '0.68rem', border: '1px solid #2d3a36', borderRadius: '999px', padding: '0.2rem 0.5rem', color: 'var(--text-secondary)' }}>
+                                                                                                    {query}
+                                                                                                </span>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                {scene.stock_candidates.length > 0 && (
+                                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
+                                                                                        {scene.stock_candidates.map(candidate => (
+                                                                                            <button
+                                                                                                key={candidate.candidate_id}
+                                                                                                type="button"
+                                                                                                onClick={() => {
+                                                                                                    const nextSceneState = candidate.type.startsWith('local_')
+                                                                                                        ? 'resolved_by_library'
+                                                                                                        : 'resolved_by_stock';
+                                                                                                    setSceneTimeline(prev => prev.map(item => item.scene_id === scene.scene_id ? {
+                                                                                                        ...item,
+                                                                                                        selected_asset: {
+                                                                                                            asset_source: candidate.type,
+                                                                                                            asset_url: candidate.asset_url,
+                                                                                                            thumbnail_url: candidate.thumbnail_url,
+                                                                                                            candidate_id: candidate.candidate_id,
+                                                                                                        },
+                                                                                                        asset_source: candidate.type,
+                                                                                                        scene_state: nextSceneState,
+                                                                                                    } : item));
+                                                                                                }}
+                                                                                                style={{ border: scene.selected_asset?.candidate_id === candidate.candidate_id ? '1px solid var(--accent)' : '1px solid #333', background: '#121212', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                                                                                            >
+                                                                                                <div style={{ aspectRatio: '9 / 16', background: '#1a1a1a', position: 'relative' }}>
+                                                                                                    {isVideoAssetType(candidate.type) ? (
+                                                                                                        <video
+                                                                                                            src={resolveAssetUrl(candidate.asset_url)}
+                                                                                                            poster={resolveAssetUrl(candidate.thumbnail_url)}
+                                                                                                            controls
+                                                                                                            muted
+                                                                                                            playsInline
+                                                                                                            preload="metadata"
+                                                                                                            onClick={(event) => event.stopPropagation()}
+                                                                                                            style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000' }}
+                                                                                                        />
+                                                                                                    ) : (
+                                                                                                        <img src={resolveAssetUrl(candidate.thumbnail_url)} alt={candidate.query} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                                                    )}
+                                                                                                    <div style={{ position: 'absolute', top: '0.4rem', left: '0.4rem', background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: '0.66rem', fontWeight: 700, padding: '0.2rem 0.45rem', borderRadius: '999px', pointerEvents: 'none' }}>
+                                                                                                        {isVideoAssetType(candidate.type) ? 'VIDEO' : 'IMAGE'}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                <div style={{ padding: '0.5rem' }}>
+                                                                                                    <div style={{ fontSize: '0.72rem', color: '#fff', fontWeight: 600 }}>{describeCandidateType(candidate.type)}</div>
+                                                                                                    <div style={{ fontSize: '0.68rem', color: '#888', marginTop: '0.2rem' }}>{candidate.query}</div>
+                                                                                                    <div style={{ fontSize: '0.66rem', color: '#777', marginTop: '0.2rem' }}>
+                                                                                                        {candidate.source_provider} • score {candidate.score.toFixed(1)}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </button>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         )}
                                                                         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>

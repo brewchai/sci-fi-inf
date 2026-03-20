@@ -1160,6 +1160,58 @@ async def resolve_scene_candidates(request: ResolveSceneCandidatesRequest):
     return ResolveSceneCandidatesResponse(scenes=updated_scenes)
 
 
+class RefetchSceneCandidatesRequest(BaseModel):
+    script: str = Field(..., description="Narration script or transcript backing the scene")
+    scene: SceneTimelineItem
+    queries: list[str] = Field(default_factory=list, description="Explicit stock search queries for this scene")
+    llm_rerank: bool = Field(default=False, description="Whether to apply LLM reranking for this single-scene refetch")
+
+
+class RefetchSceneCandidatesResponse(BaseModel):
+    scene: SceneTimelineItem
+
+
+@router.post("/refetch-scene-candidates", response_model=RefetchSceneCandidatesResponse)
+async def refetch_scene_candidates(request: RefetchSceneCandidatesRequest):
+    """Refetch stock candidates for a single scene using explicit user-provided queries."""
+    from app.services.visual_search import search_scene_candidates
+
+    cleaned_queries = [str(query).strip() for query in request.queries if str(query).strip()]
+    if not cleaned_queries:
+        raise HTTPException(status_code=400, detail="At least one non-empty search query is required")
+
+    scene = request.scene
+    scene_payload = {
+        "scene_id": scene.scene_id,
+        "anchor_word": scene.anchor_word,
+        "visual_focus_word": scene.visual_focus_word,
+        "anchor_phrase": scene.anchor_phrase,
+        "transcript_excerpt": scene.transcript_excerpt,
+        "start_time_seconds": scene.start_time_seconds,
+        "end_time_seconds": scene.end_time_seconds,
+        "search_queries": cleaned_queries,
+    }
+
+    candidates_by_scene = await search_scene_candidates(
+        [scene_payload],
+        full_script=request.script,
+        llm_rerank=request.llm_rerank,
+        include_local_candidates=False,
+        max_queries_per_scene=max(len(cleaned_queries), 1),
+        max_candidates_per_scene=10,
+        explicit_queries_by_scene={scene.scene_id: cleaned_queries},
+        video_results_per_query=5,
+        image_results_per_query=4,
+    )
+
+    updated_scene = scene.model_copy(update={
+        "search_queries": cleaned_queries,
+        "stock_candidates": [SceneAssetCandidate(**candidate) for candidate in candidates_by_scene.get(scene.scene_id, [])],
+        "scene_state": scene.scene_state if scene.asset_source != "none" else "unresolved",
+    })
+    return RefetchSceneCandidatesResponse(scene=updated_scene)
+
+
 class GenerateSceneAIFallbacksRequest(BaseModel):
     script: str = Field(..., description="Narration script or transcript backing the scenes")
     scenes: list[SceneTimelineItem]
