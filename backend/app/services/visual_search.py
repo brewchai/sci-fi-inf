@@ -1,7 +1,7 @@
 """
 Visual search service for auto-matching stock visuals to reel scenes.
 
-Uses Pexels photo + video APIs and GPT-4o-mini to produce concrete,
+Uses Pexels photo + video APIs and GPT-4o to produce concrete,
 portrait-safe search terms and ranked candidates per scene.
 """
 import json
@@ -12,9 +12,10 @@ from typing import Literal
 
 import httpx
 from loguru import logger
-from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.services.llm_router import complete_text
+from app.services.scene_planner import SCENE_INTELLIGENCE_MODEL, build_scene_plan
 
 PEXELS_VIDEO_SEARCH_URL = "https://api.pexels.com/videos/search"
 PEXELS_IMAGE_SEARCH_URL = "https://api.pexels.com/v1/search"
@@ -41,6 +42,8 @@ class StockAssetCandidate:
     duration_seconds: float | None
     query: str
     score: float
+    rationale: str | None = None
+    confidence: float | None = None
 
 
 async def extract_visual_keywords(
@@ -49,8 +52,6 @@ async def extract_visual_keywords(
     num_keywords: int = 4,
 ) -> list[str]:
     """Use GPT-4o-mini to extract concrete, visually-searchable terms from content."""
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
     prompt = (
         "You are a visual researcher for a science video production team.\n"
         "Given the headline and narration script below, return exactly "
@@ -69,14 +70,15 @@ async def extract_visual_keywords(
     )
 
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = await complete_text(
+            capability="visual_keywords",
+            default_openai_model=SCENE_INTELLIGENCE_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.4,
             max_tokens=300,
         )
-        raw = resp.choices[0].message.content
+        raw = resp.text
         data = json.loads(raw)
         # GPT may return {"keywords": [...]}, {"terms": [...]}, or a bare array
         if isinstance(data, list):
@@ -102,18 +104,19 @@ async def extract_scene_search_queries(
     scenes: list[dict],
     full_script: str = "",
     max_queries: int = 3,
+    scene_context_by_id: dict[str, dict] | None = None,
 ) -> dict[str, list[str]]:
     """Generate stock-searchable queries per scene from transcript slices."""
     if not scenes:
         return {}
 
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     normalized_story = " ".join((full_script or "").split()).strip()
     if len(normalized_story) > 7000:
         normalized_story = normalized_story[:7000] + "..."
 
     scene_prompt = []
     for scene in scenes:
+        scene_context = (scene_context_by_id or {}).get(scene["scene_id"], {})
         scene_prompt.append(
             {
                 "scene_id": scene["scene_id"],
@@ -121,13 +124,18 @@ async def extract_scene_search_queries(
                 "visual_focus_word": scene.get("visual_focus_word", ""),
                 "anchor_phrase": scene.get("anchor_phrase", ""),
                 "transcript_excerpt": scene.get("transcript_excerpt", ""),
+                "scene_role": scene_context.get("scene_role") or scene.get("scene_role") or "setup",
+                "asset_bias": scene_context.get("asset_bias") or scene.get("asset_bias") or "either",
+                "prompt_focus": scene_context.get("prompt_focus") or "",
+                "continuity_note": scene_context.get("continuity_note") or "",
+                "novelty_note": scene_context.get("novelty_note") or "",
+                "stock_match_rationale": scene_context.get("stock_match_rationale") or "",
             }
         )
 
     prompt = (
-        "You are the most viral AI video reel director on the internet.\n"
         "You are planning stock footage searches for a vertical science reel.\n"
-        "Use the full narration for story context, but write search terms only for the specific current scene.\n"
+        "Use the full narration and scene context for story awareness, but write search terms only for the specific current scene.\n"
         "For each scene, produce exactly "
         f"{max_queries} short search queries that work well on Pexels video search.\n"
         "Rules:\n"
@@ -135,25 +143,28 @@ async def extract_scene_search_queries(
         "- Keep every query simple, punchy, and not too compound.\n"
         "- Prefer 1-3 words. 4 words maximum only when absolutely necessary.\n"
         "- Use visual_focus_word and anchor_phrase as semantic source of truth when anchor_word is too generic.\n"
+        "- Let scene_role, prompt_focus, continuity_note, and novelty_note shape the queries so the reel progresses logically.\n"
         "- Favor human emotion, scientific apparatus, observable motion, and strong portrait framing.\n"
         "- Prioritize terms likely to return dynamic video, not static concepts.\n"
         "- Avoid abstract concepts and academic phrasing.\n"
         "- Avoid stacking multiple nouns into one long search phrase.\n"
         "- Return broad-enough search terms that stock libraries are likely to have results for.\n"
+        "- Query 1 should be the best narrative fit, Query 2 should be broader for stock availability, Query 3 should provide variation when useful.\n"
         "- Return JSON: {\"scenes\": [{\"scene_id\": \"...\", \"queries\": [\"...\", ...]}]}\n\n"
         f"FULL NARRATION:\n{normalized_story}\n\n"
         f"SCENES:\n{json.dumps(scene_prompt, ensure_ascii=False)}"
     )
 
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = await complete_text(
+            capability="visual_scene_queries",
+            default_openai_model=SCENE_INTELLIGENCE_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.4,
             max_tokens=1800,
         )
-        data = json.loads(resp.choices[0].message.content)
+        data = json.loads(resp.text)
         results: dict[str, list[str]] = {}
         for item in data.get("scenes", []):
             scene_id = str(item.get("scene_id", "")).strip()
@@ -445,17 +456,23 @@ def _score_visual_candidate(
     duration_seconds: float | None,
     is_hook: bool = False,
     asset_type: str,
+    asset_bias: str = "either",
 ) -> float:
     portrait_ratio = height / max(width, 1)
     portrait_bonus = 2.0 if portrait_ratio >= 1.3 else 0.0
     close_up_bonus = 1.5 if any(term in query.lower() for term in ["close", "scientist", "microscope", "lab"]) else 0.0
     # Prefer video motion over static images for reels.
     motion_bonus = 2.5 if asset_type == "stock_video" else 0.0
+    bias_bonus = 0.0
+    if asset_bias == "video":
+        bias_bonus = 1.6 if asset_type == "stock_video" else -0.2
+    elif asset_bias == "image":
+        bias_bonus = 1.2 if asset_type == "stock_image" else -0.15
     duration_bonus = 0.0
     if duration_seconds is not None:
         duration_bonus = 1.2 if 4 <= duration_seconds <= 12 else 0.4
     hook_bonus = 1.0 if is_hook and any(term in query.lower() for term in ["close", "dramatic", "reaction", "experiment"]) else 0.0
-    return portrait_bonus + close_up_bonus + motion_bonus + duration_bonus + hook_bonus
+    return portrait_bonus + close_up_bonus + motion_bonus + bias_bonus + duration_bonus + hook_bonus
 
 
 async def search_scene_candidates(
@@ -474,6 +491,22 @@ async def search_scene_candidates(
         return {}
 
     local_candidates_by_scene: dict[str, list[dict]] = {scene["scene_id"]: [] for scene in scenes}
+    scene_context_by_id = await build_scene_plan(full_script, scenes)
+    for scene in scenes:
+        scene_context = scene_context_by_id.get(scene["scene_id"], {})
+        for key in (
+            "scene_role",
+            "asset_bias",
+            "stock_match_rationale",
+            "fx_rationale",
+            "planning_confidence",
+        ):
+            if scene_context.get(key) is not None:
+                scene[key] = scene_context[key]
+        if scene.get("scene_fx_name") is None and scene_context.get("scene_fx_name") is not None:
+            scene["scene_fx_name"] = scene_context["scene_fx_name"]
+        if scene.get("scene_fx_strength") is None and scene_context.get("scene_fx_strength") is not None:
+            scene["scene_fx_strength"] = scene_context["scene_fx_strength"]
     if include_local_candidates:
         try:
             from app.services.local_media_library import LocalMediaLibraryService
@@ -495,6 +528,7 @@ async def search_scene_candidates(
         scenes,
         full_script=full_script,
         max_queries=max_queries_per_scene,
+        scene_context_by_id=scene_context_by_id,
     )
     results: dict[str, list[dict]] = {scene["scene_id"]: [] for scene in scenes}
 
@@ -514,7 +548,9 @@ async def search_scene_candidates(
     async with httpx.AsyncClient(timeout=20) as client:
         for scene in scenes:
             scene_id = scene["scene_id"]
-            is_hook = False
+            scene_context = scene_context_by_id.get(scene_id, {})
+            is_hook = (scene_context.get("scene_role") or scene.get("scene_role")) == "hook"
+            asset_bias = str(scene_context.get("asset_bias") or scene.get("asset_bias") or "either")
             video_candidates: list[StockAssetCandidate] = []
             image_candidates: list[StockAssetCandidate] = []
             queries = queries_by_scene.get(scene_id, [])[:max_queries_per_scene]
@@ -543,6 +579,7 @@ async def search_scene_candidates(
                             duration_seconds=video.get("duration"),
                             is_hook=is_hook,
                             asset_type="stock_video",
+                            asset_bias=asset_bias,
                         )
                         video_candidates.append(StockAssetCandidate(
                             candidate_id=f"{scene_id}-vid-{q_idx}-{idx}",
@@ -555,6 +592,8 @@ async def search_scene_candidates(
                             duration_seconds=video.get("duration"),
                             query=query,
                             score=score,
+                            rationale=scene_context.get("stock_match_rationale"),
+                            confidence=scene_context.get("planning_confidence"),
                         ))
                 except Exception as exc:
                     logger.warning(f"Pexels video search failed for '{query}': {exc}")
@@ -585,6 +624,7 @@ async def search_scene_candidates(
                                 duration_seconds=None,
                                 is_hook=is_hook,
                                 asset_type="stock_image",
+                                asset_bias=asset_bias,
                             )
                             image_candidates.append(StockAssetCandidate(
                                 candidate_id=f"{scene_id}-img-{q_idx}-{idx}",
@@ -597,6 +637,8 @@ async def search_scene_candidates(
                                 duration_seconds=None,
                                 query=query,
                                 score=score,
+                                rationale=scene_context.get("stock_match_rationale"),
+                                confidence=scene_context.get("planning_confidence"),
                             ))
                     except Exception as exc:
                         logger.warning(f"Pexels image search failed for '{query}': {exc}")
@@ -628,6 +670,7 @@ async def search_scene_candidates(
             scenes=scenes,
             candidates_by_scene=results,
             max_candidates_per_scene=max_candidates_per_scene,
+            scene_context_by_id=scene_context_by_id,
         )
 
     return results
@@ -639,6 +682,7 @@ async def _rerank_scene_candidates_with_story(
     scenes: list[dict],
     candidates_by_scene: dict[str, list[dict]],
     max_candidates_per_scene: int,
+    scene_context_by_id: dict[str, dict] | None = None,
 ) -> dict[str, list[dict]]:
     """LLM rerank pass: choose candidates using whole-story narrative context."""
     story_text = " ".join((full_script or "").split()).strip()
@@ -671,6 +715,9 @@ async def _rerank_scene_candidates_with_story(
             "transcript_excerpt": scene.get("transcript_excerpt", ""),
             "start_time_seconds": scene.get("start_time_seconds", 0),
             "end_time_seconds": scene.get("end_time_seconds", 0),
+            "scene_role": (scene_context_by_id or {}).get(scene_id, {}).get("scene_role") or scene.get("scene_role", ""),
+            "asset_bias": (scene_context_by_id or {}).get(scene_id, {}).get("asset_bias") or scene.get("asset_bias", ""),
+            "stock_match_rationale": (scene_context_by_id or {}).get(scene_id, {}).get("stock_match_rationale") or scene.get("stock_match_rationale", ""),
             "candidates": limited,
         })
 
@@ -689,30 +736,42 @@ async def _rerank_scene_candidates_with_story(
         "2) Prefer motion assets (video) when fit is comparable.\n"
         "3) Avoid repetitive picks across adjacent scenes unless repetition is intentional.\n"
         "4) Use visual_focus_word and anchor_phrase semantics over generic trigger anchor_word when needed.\n"
-        "5) Use transcript_excerpt + scene position.\n"
-        "6) Return strict JSON only.\n\n"
+        "5) Use transcript_excerpt + scene position + scene_role + stock_match_rationale.\n"
+        "6) Return a short rationale for the top pick of each scene.\n"
+        "7) Return strict JSON only.\n\n"
         f"STORY:\n{story_text}\n\n"
         f"SCENES:\n{json.dumps(payload_scenes, ensure_ascii=False)}\n\n"
-        'Return JSON: {"ranked_scenes":[{"scene_id":"...","candidate_ids":["best","second","third"]}]}'
+        'Return JSON: {"ranked_scenes":[{"scene_id":"...","candidate_ids":["best","second","third"],"top_rationale":"...","confidence":0.0}]}'
     )
 
     try:
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+        response = await complete_text(
+            capability="visual_rerank",
+            default_openai_model=SCENE_INTELLIGENCE_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
             max_tokens=2500,
         )
-        data = json.loads(response.choices[0].message.content or "{}")
+        data = json.loads(response.text or "{}")
         ranked_rows = data.get("ranked_scenes", [])
         ranked_map: dict[str, list[str]] = {}
+        rationale_map: dict[str, tuple[str, float | None]] = {}
         for row in ranked_rows:
             scene_id = str(row.get("scene_id", "")).strip()
             candidate_ids = [str(cid).strip() for cid in row.get("candidate_ids", []) if str(cid).strip()]
             if scene_id and candidate_ids:
+                confidence_value = None
+                if row.get("confidence") is not None:
+                    try:
+                        confidence_value = float(row.get("confidence"))
+                    except (TypeError, ValueError):
+                        confidence_value = None
                 ranked_map[scene_id] = candidate_ids
+                rationale_map[scene_id] = (
+                    str(row.get("top_rationale") or "").strip(),
+                    confidence_value,
+                )
 
         reranked: dict[str, list[dict]] = {}
         for scene in scenes:
@@ -733,7 +792,15 @@ async def _rerank_scene_candidates_with_story(
                     -float(candidate.get("score", 0.0)),
                 ),
             )
-            reranked[scene_id] = sorted_candidates[:max_candidates_per_scene]
+            limited = sorted_candidates[:max_candidates_per_scene]
+            top_rationale, confidence = rationale_map.get(scene_id, ("", None))
+            if limited and top_rationale:
+                limited[0] = {
+                    **limited[0],
+                    "rationale": top_rationale,
+                    "confidence": confidence,
+                }
+            reranked[scene_id] = limited
         logger.info("Applied LLM narrative rerank across scene candidates")
         return reranked
     except Exception as exc:

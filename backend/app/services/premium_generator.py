@@ -1,14 +1,12 @@
 """Generate premium content for AI papers."""
-from openai import AsyncOpenAI
-from app.core.config import settings
 from loguru import logger
+from app.services.llm_router import complete_text
 
 
 class PremiumContentGenerator:
     """Generate deep analysis, code walkthroughs, and applications for AI papers."""
     
     def __init__(self, model: str = "gpt-4o-mini"):
-        self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = model
     
     async def generate(self, paper) -> dict:
@@ -78,14 +76,15 @@ AVOID:
 Write like a seasoned tech reporter who has seen many papers come and go - informed, clear, neither cynical nor starry-eyed.
 """
         
-        response = await self.llm.chat.completions.create(
-            model=self.model,
+        response = await complete_text(
+            capability="premium_deep_analysis",
+            default_openai_model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,  # Slightly lower for more factual tone
             max_tokens=2000
         )
         
-        content = response.choices[0].message.content
+        content = response.text
         logger.info(f"Generated deep analysis ({len(content)} chars)")
         return content
     
@@ -113,14 +112,15 @@ Note: If no official code is available, provide pseudocode or conceptual example
 Length: 500-800 words.
 """
         
-        response = await self.llm.chat.completions.create(
-            model=self.model,
+        response = await complete_text(
+            capability="premium_code_walkthrough",
+            default_openai_model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
             max_tokens=2000
         )
         
-        content = response.choices[0].message.content
+        content = response.text
         logger.info(f"Generated code walkthrough ({len(content)} chars)")
         return content
     
@@ -151,13 +151,14 @@ Tone: Practical and actionable, not theoretical.
 Length: 400-600 words.
 """
         
-        response = await self.llm.chat.completions.create(
-            model=self.model,
+        response = await complete_text(
+            capability="premium_applications",
+            default_openai_model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=800
         )
         
-        content = response.choices[0].message.content
+        content = response.text
         logger.info(f"Generated applications ({len(content)} chars)")
         return content

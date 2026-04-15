@@ -5,8 +5,8 @@ import json
 import re
 from pathlib import Path
 from loguru import logger
-from openai import AsyncOpenAI
-from app.core.config import settings
+from app.services.scene_planner import SCENE_INTELLIGENCE_MODEL
+from app.services.llm_router import complete_text
 
 
 EFFECT_GUIDANCE_PATH = Path(__file__).resolve().parents[2] / "static" / "AI_Director" / "effect_guidance.json"
@@ -14,7 +14,6 @@ EFFECT_GUIDANCE_PATH = Path(__file__).resolve().parents[2] / "static" / "AI_Dire
 
 class AnchorSelector:
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.effect_guidance = self._load_effect_guidance()
 
     def _load_effect_guidance(self) -> list[dict]:
@@ -190,8 +189,9 @@ class AnchorSelector:
         )
 
         try:
-            resp = await self.client.chat.completions.create(
-                model="gpt-4o",
+            resp = await complete_text(
+                capability="anchor_selection",
+                default_openai_model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"TRANSCRIPT:\n{formatted_transcript}"}
@@ -200,7 +200,7 @@ class AnchorSelector:
                 temperature=0.7,
                 max_tokens=2500,
             )
-            raw = resp.choices[0].message.content
+            raw = resp.text
             data = json.loads(raw)
             anchors_data = data.get("anchors", [])
             
@@ -270,8 +270,9 @@ class AnchorSelector:
         )
 
         try:
-            resp = await self.client.chat.completions.create(
-                model="gpt-4o",
+            resp = await complete_text(
+                capability="anchor_effects",
+                default_openai_model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"FULL SCRIPT:\n{script}\n\nTARGET ANCHORS:\n{anchors_context}"},
@@ -280,7 +281,7 @@ class AnchorSelector:
                 temperature=0.3,
                 max_tokens=2500,
             )
-            raw = resp.choices[0].message.content
+            raw = resp.text
             data = json.loads(raw)
             timeline = data.get("timeline", [])
             transition_set = set(transitions)
@@ -306,7 +307,7 @@ class AnchorSelector:
                 for anchor in anchors
             ]
 
-    async def generate_prompts(self, script: str, anchors: list[dict]) -> list[dict]:
+    async def generate_prompts(self, script: str, anchors: list[dict], scene_contexts: list[dict] | None = None) -> list[dict]:
         """
         Phase 2: Given the full script and the exact pre-selected Anchor Words,
         generate descriptive AI Image (FLUX.1) prompts tailored to those specific points in the story.
@@ -315,15 +316,21 @@ class AnchorSelector:
         if not anchors: return []
         num_prompts = len(anchors)
         
-        # Build context string of anchors
-        anchors_context = "\n".join(
-            [
+        context_lookup = scene_contexts or [{} for _ in anchors]
+        anchors_context_rows = []
+        for i, a in enumerate(anchors):
+            context = context_lookup[i] if i < len(context_lookup) and isinstance(context_lookup[i], dict) else {}
+            anchors_context_rows.append(
                 f"Target {i+1}: Trigger '{a['word']}' at {a['start']}s"
                 f" | Focus '{a.get('focus_word', a['word'])}'"
                 f" | Phrase '{a.get('anchor_phrase', a['word'])}'"
-                for i, a in enumerate(anchors)
-            ]
-        )
+                f" | Scene role '{context.get('scene_role', 'setup')}'"
+                f" | Asset bias '{context.get('asset_bias', 'either')}'"
+                f" | Prompt focus '{context.get('prompt_focus', '')}'"
+                f" | Continuity '{context.get('continuity_note', '')}'"
+                f" | Novelty '{context.get('novelty_note', '')}'"
+            )
+        anchors_context = "\n".join(anchors_context_rows)
         transitions = self._allowed_transitions()
         transitions_context = "\n".join(
             [f"- {item['transition_name']}: {item.get('guidance', '').strip()}" for item in self.effect_guidance]
@@ -347,17 +354,21 @@ class AnchorSelector:
             "7. NO text, logos, words, or watermarks in any image.\n"
             "8. For every target, choose one transition effect to trigger exactly when that anchor word is spoken. "
             "Use the full script context and neighboring anchors to decide the transition emotion.\n"
-            "9. Use the Focus/Phrase semantics for visual concept, not just the Trigger word.\n"
-            f"10. You MUST pick effect_transition_name from this exact allowed set: {allowed_transition_names}.\n"
-            "11. Output strictly a JSON object with a 'timeline' array containing 'prompt', 'anchor_word' (from the target), 'start_time_seconds', and 'effect_transition_name'.\n\n"
+            "9. Keep prompts isolated per scene, but NEVER think in isolation. Use scene role, continuity, and novelty guidance so adjacent prompts feel like one coherent reel.\n"
+            "10. Use the Focus/Phrase semantics for visual concept, not just the Trigger word.\n"
+            "11. Describe a concrete visible foreground subject or action, not generic science vibes.\n"
+            "12. Avoid repeating the same lab composition across adjacent scenes unless the context explicitly calls for continuity.\n"
+            f"13. You MUST pick effect_transition_name from this exact allowed set: {allowed_transition_names}.\n"
+            "14. Output strictly a JSON object with a 'timeline' array containing 'prompt', 'anchor_word' (from the target), 'start_time_seconds', and 'effect_transition_name'.\n\n"
             f"TRANSITION GUIDANCE:\n{transitions_context}\n\n"
             
             f"OUTPUT FORMAT:\n{{\"timeline\": [\n  {{\"prompt\": \"Extreme close-up of a glowing petri dish pulsing with energy..., RAW photo, shot on cinema lens...\", \"anchor_word\": \"Welcome\", \"start_time_seconds\": 0.12, \"effect_transition_name\": \"CrossZoom\"}},\n... exactly {num_prompts} objects\n]}}"
         )
 
         try:
-            resp = await self.client.chat.completions.create(
-                model="gpt-4o",
+            resp = await complete_text(
+                capability="anchor_prompt_generation",
+                default_openai_model=SCENE_INTELLIGENCE_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"FULL SCRIPT:\n{script}\n\nTARGET ANCHOR WORDS:\n{anchors_context}"}
@@ -366,7 +377,7 @@ class AnchorSelector:
                 temperature=0.7,
                 max_tokens=6000,
             )
-            raw = resp.choices[0].message.content
+            raw = resp.text
             data = json.loads(raw)
             timeline = data.get("timeline", [])
             

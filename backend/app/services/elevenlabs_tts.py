@@ -5,6 +5,7 @@ Uses the ElevenLabs API for high-quality, expressive text-to-speech.
 """
 import asyncio
 import os
+import re
 import tempfile
 
 import httpx
@@ -77,6 +78,10 @@ DEFAULT_MODEL = "eleven_multilingual_v2"
 DEFAULT_STABILITY = 0.65
 DEFAULT_SIMILARITY_BOOST = 0.85
 DEFAULT_STYLE = 0.10
+PARALLEL_TTS_MIN_CHARS = 280
+MAX_PARALLEL_TTS_REQUESTS = 2
+MAX_TTS_RETRIES = 4
+BASE_RETRY_DELAY_SECONDS = 1.5
 
 
 class ElevenLabsTTS:
@@ -110,9 +115,119 @@ class ElevenLabsTTS:
         Returns:
             Audio bytes (MP3 format)
         """
+        logger.info(
+            f"ElevenLabs TTS: {len(text)} chars, voice={voice}, speed={speed}, "
+            f"stability={stability}, similarity_boost={similarity_boost}, style={style}"
+        )
+
+        sentences = self._split_into_sentences(text)
+        should_parallelize = len(text) >= PARALLEL_TTS_MIN_CHARS and len(sentences) > 1
+
+        if should_parallelize:
+            logger.info(
+                f"Chunking ElevenLabs request into {len(sentences)} sentence segments "
+                f"with concurrency={MAX_PARALLEL_TTS_REQUESTS}"
+            )
+            try:
+                audio_bytes = await self._generate_parallel_audio(
+                    sentences,
+                    voice=voice,
+                    stability=stability,
+                    similarity_boost=similarity_boost,
+                    style=style,
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response is not None and exc.response.status_code == 429:
+                    logger.warning(
+                        "ElevenLabs rate limited parallel chunk generation; "
+                        "falling back to sequential sentence generation"
+                    )
+                    audio_bytes = await self._generate_sequential_audio(
+                        sentences,
+                        voice=voice,
+                        stability=stability,
+                        similarity_boost=similarity_boost,
+                        style=style,
+                    )
+                else:
+                    raise
+        else:
+            audio_bytes = await self._generate_audio_chunk(
+                text,
+                voice=voice,
+                stability=stability,
+                similarity_boost=similarity_boost,
+                style=style,
+            )
+
+        if abs(speed - 1.0) > 0.001:
+            audio_bytes = await self._apply_speed(audio_bytes, speed)
+        logger.info(f"ElevenLabs generated audio: {len(audio_bytes)} bytes")
+        return audio_bytes
+
+    def _split_into_sentences(self, text: str) -> list[str]:
+        cleaned_text = re.sub(r"\s+", " ", text).strip()
+        if not cleaned_text:
+            return []
+
+        parts = re.split(r"(?<=[.!?])\s+", cleaned_text)
+        sentences = [part.strip() for part in parts if part.strip()]
+        return sentences or [cleaned_text]
+
+    async def _generate_parallel_audio(
+        self,
+        sentences: list[str],
+        voice: str,
+        stability: float,
+        similarity_boost: float,
+        style: float,
+    ) -> bytes:
+        semaphore = asyncio.Semaphore(MAX_PARALLEL_TTS_REQUESTS)
+
+        async def generate_segment(sentence: str) -> bytes:
+            async with semaphore:
+                return await self._generate_audio_chunk(
+                    sentence,
+                    voice=voice,
+                    stability=stability,
+                    similarity_boost=similarity_boost,
+                    style=style,
+                )
+
+        segments = await asyncio.gather(*(generate_segment(sentence) for sentence in sentences))
+        return await self._concatenate_segments(segments)
+
+    async def _generate_sequential_audio(
+        self,
+        sentences: list[str],
+        voice: str,
+        stability: float,
+        similarity_boost: float,
+        style: float,
+    ) -> bytes:
+        segments: list[bytes] = []
+        for sentence in sentences:
+            segments.append(
+                await self._generate_audio_chunk(
+                    sentence,
+                    voice=voice,
+                    stability=stability,
+                    similarity_boost=similarity_boost,
+                    style=style,
+                )
+            )
+        return await self._concatenate_segments(segments)
+
+    async def _generate_audio_chunk(
+        self,
+        text: str,
+        voice: str,
+        stability: float,
+        similarity_boost: float,
+        style: float,
+    ) -> bytes:
         # Accept either a known alias from REEL_VOICES or a raw ElevenLabs voice ID.
         voice_id = REEL_VOICES.get(voice, voice or REEL_VOICES[DEFAULT_VOICE])
-
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
         headers = {
@@ -132,20 +247,84 @@ class ElevenLabsTTS:
             },
         }
 
-        logger.info(
-            f"ElevenLabs TTS: {len(text)} chars, voice={voice}, speed={speed}, "
-            f"stability={stability}, similarity_boost={similarity_boost}, style={style}"
-        )
-
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+            for attempt in range(1, MAX_TTS_RETRIES + 1):
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code != 429:
+                    resp.raise_for_status()
+                    return resp.content
 
-        audio_bytes = resp.content
-        if abs(speed - 1.0) > 0.001:
-            audio_bytes = await self._apply_speed(audio_bytes, speed)
-        logger.info(f"ElevenLabs generated audio: {len(audio_bytes)} bytes")
-        return audio_bytes
+                retry_after_header = resp.headers.get("retry-after")
+                try:
+                    retry_after = float(retry_after_header) if retry_after_header else 0.0
+                except ValueError:
+                    retry_after = 0.0
+
+                if attempt == MAX_TTS_RETRIES:
+                    resp.raise_for_status()
+
+                delay_seconds = max(retry_after, BASE_RETRY_DELAY_SECONDS * attempt)
+                logger.warning(
+                    f"ElevenLabs rate limit hit for chunk ({len(text)} chars). "
+                    f"Retrying in {delay_seconds:.1f}s (attempt {attempt}/{MAX_TTS_RETRIES})"
+                )
+                await asyncio.sleep(delay_seconds)
+        raise RuntimeError("ElevenLabs TTS retry loop exited unexpectedly")
+
+    async def _concatenate_segments(self, segments: list[bytes]) -> bytes:
+        if not segments:
+            return b""
+        if len(segments) == 1:
+            return segments[0]
+
+        segment_paths: list[str] = []
+        list_fd, list_path = tempfile.mkstemp(suffix=".txt")
+        output_fd, output_path = tempfile.mkstemp(suffix=".mp3")
+
+        try:
+            for segment in segments:
+                segment_fd, segment_path = tempfile.mkstemp(suffix=".mp3")
+                segment_paths.append(segment_path)
+                with os.fdopen(segment_fd, "wb") as handle:
+                    handle.write(segment)
+
+            with os.fdopen(list_fd, "w") as handle:
+                for segment_path in segment_paths:
+                    handle.write(f"file '{segment_path}'\n")
+
+            os.close(output_fd)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", list_path,
+                "-c:a", "libmp3lame",
+                "-b:a", "192k",
+                output_path,
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                raise RuntimeError(
+                    "Failed to concatenate ElevenLabs sentence segments: "
+                    f"{stderr.decode(errors='ignore')}"
+                )
+
+            with open(output_path, "rb") as handle:
+                return handle.read()
+        finally:
+            if os.path.exists(list_path):
+                os.unlink(list_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            for segment_path in segment_paths:
+                if os.path.exists(segment_path):
+                    os.unlink(segment_path)
 
     async def _apply_speed(self, audio_bytes: bytes, speed: float) -> bytes:
         """Apply speed locally so ElevenLabs voice output respects the UI slider."""

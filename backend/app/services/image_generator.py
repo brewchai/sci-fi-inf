@@ -4,8 +4,8 @@ import logging
 import base64
 from typing import List, Optional
 import httpx
-from openai import AsyncOpenAI
 from app.core.config import settings
+from app.services.llm_router import complete_text
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,6 @@ class ImageGenerationEngine:
         self.api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
         self.current_key_idx = 0
         
-        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
     def _get_current_key(self) -> Optional[str]:
         if not self.api_keys:
             return None
@@ -70,22 +68,23 @@ class ImageGenerationEngine:
     async def generate_prompt_from_text(self, text: str) -> str:
         """Use LLM to generate an optimized image generation prompt from plain text."""
         try:
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4o",
+            response = await complete_text(
+                capability="image_prompt",
+                default_openai_model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert prompt engineer for cutting-edge photorealistic AI image generators (like midjourney v6 or FLUX). Given a slide headline and takeaway text, generate a single, highly detailed prompt (75 to 100 words). The prompt MUST describe a realistic, highly dramatic, eye-catching, and authentic photography-style scene. Focus intensely on telling the story visually! CRITICAL REQUIREMENT: Instruct the AI to place the brightest, most vibrant elements and ALL the critical storytelling visual aspects in the TOP HALF of the image, physically above the center line. The overall image must be visually bright, illuminated, and striking. If it helps the narrative, you can generate a composite image (e.g., a scientist in a lab with the faint reflection of a bright, vivid nuclear explosion in the upper background, dramatic cinematic lighting focused on the top half). You must include specific photographic terminology (e.g., 'shot on 35mm lens, cinematic lighting, bright highlights, dramatic shadows, volumetric haze, highly detailed, 8k resolution, raw photo'). DO NOT include cartoony, stylized, or abstract concepts. DO NOT ask the AI to generate text, letters, or words in the image. Do not wrap in quotes."},
+                    {"role": "system", "content": "You are an expert prompt engineer for cutting-edge photorealistic AI image generators (like Midjourney v6 or FLUX). Given a slide headline and takeaway text, generate a single, highly detailed prompt (90 to 140 words). The image must not be generic mood photography. It must visually explain the concept in a concrete, story-first way so a viewer instantly understands what is new, surprising, or important. Prefer explainer-style editorial imagery: a real device in use, a scientific mechanism becoming visible, a before-and-after effect, a human interacting with a new material, or a dramatic macro detail that clarifies the breakthrough. If the concept involves a product, interface, treatment, biomaterial, robot, implant, or lab method, show it actively doing something specific in the scene. Small inset magnified details, ghosted overlays, or layered editorial callouts are allowed if they help explain the idea, but the image should still feel like one coherent premium social-media visual, not a comic panel. CRITICAL COMPOSITION REQUIREMENT: the single most important foreground subject or attention-grabbing explanatory element must sit in the upper portion of the frame, above the center line, so the middle and lower area remain usable for overlaid headline text. Do this with natural composition, not by creating a literal top section and bottom section. Keep the image continuous, immersive, and organic from top to bottom. Humans are allowed when they strengthen the story, but prefer hands using a device, over-the-shoulder interaction, documentary distance, or body-context framing rather than glamour portraits. Avoid extreme facial beauty close-ups, isolated skin texture, and generic stock-photo smiling people. The image should feel premium, novel, and immediately legible as a scientific or technological concept explainer. Include specific photographic terminology such as lens choice, lighting, texture, depth of field, macro detail, editorial product photography, cinematic realism, highly detailed, 8k, raw photo. Do NOT include cartoony, stylized, surreal, or abstract concepts. Do NOT ask the AI to generate text, letters, captions, UI words, or readable labels in the image. Do not wrap in quotes."},
                     {"role": "user", "content": text}
                 ],
                 temperature=0.8,
-                max_tokens=150
+                max_tokens=220
             )
-            return response.choices[0].message.content.strip()
+            return response.text.strip()
         except Exception as e:
             logger.error(f"Failed to generate prompt: {str(e)}")
             # Fallback to just using the text truncated
             return text[:200]
 
-    async def generate_image(self, prompt: str, style: str = None) -> str:
+    async def generate_image(self, prompt: str, style: str = None, aspect: str | None = None) -> str:
         """Call Together AI (FLUX.1 Schnell) to generate an image and save it locally."""
         if not self.api_keys:
             raise ValueError("No Together API keys configured. Set TOGETHER_API_KEYS in .env")
@@ -94,6 +93,11 @@ class ImageGenerationEngine:
         style_key = style if style in STYLE_PRESETS else DEFAULT_STYLE
         suffix = STYLE_PRESETS[style_key]
         full_prompt = f"{prompt}{suffix}"
+        aspect_key = aspect or "portrait_9_16"
+        if aspect_key == "square_1_1":
+            width, height = 1024, 1024
+        else:
+            width, height = 768, 1344
         
         # Try each key, allow at least 3 attempts for single keys to handle rate limits
         max_attempts = max(len(self.api_keys), 3)
@@ -106,8 +110,8 @@ class ImageGenerationEngine:
             payload = {
                 "model": "black-forest-labs/FLUX.1-schnell",
                 "prompt": full_prompt,
-                "width": 768,
-                "height": 1344,
+                "width": width,
+                "height": height,
                 "steps": 4,
                 "n": 1,
                 "response_format": "b64_json"

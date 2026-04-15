@@ -1,0 +1,206 @@
+.page {
+    min-height: 100vh;
+    padding: 3rem 1.4rem 5rem;
+    background:
+        radial-gradient(circle at top left, rgba(113, 203, 255, 0.12), transparent 26%),
+        radial-gradient(circle at top right, rgba(255, 210, 122, 0.11), transparent 24%),
+        linear-gradient(180deg, #090b12 0%, #070910 100%);
+}
+
+.hero {
+    max-width: 1040px;
+    margin: 0 auto 2.2rem;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.heroBadge {
+    width: fit-content;
+    padding: 0.38rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: #b7c4db;
+    font-size: 0.76rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.hero h1 {
+    max-width: 900px;
+    font-family: var(--font-sans);
+    font-size: clamp(2.4rem, 5vw, 4.3rem);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
+}
+
+.hero p {
+    max-width: 760px;
+    font-size: 1rem;
+    color: #97a4bc;
+}
+
+.grid {
+    max-width: 1040px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(17, 21, 31, 0.96), rgba(10, 12, 19, 0.96));
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.26);
+}
+
+.cardTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+}
+
+.cardLabel {
+    margin-bottom: 0.28rem;
+    font-size: 0.72rem;
+    color: #738099;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+}
+
+.card h2 {
+    font-family: var(--font-sans);
+    font-size: 1.25rem;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+}
+
+.pill {
+    flex-shrink: 0;
+    padding: 0.34rem 0.62rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.previewShell {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #070910;
+}
+
+.previewViewport {
+    position: relative;
+    aspect-ratio: 9 / 16;
+    overflow: hidden;
+    background: #070910;
+}
+
+.sceneLayer {
+    position: absolute;
+    inset: -6%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+}
+
+.sceneA {
+    background:
+        linear-gradient(180deg, rgba(6, 10, 17, 0.08), rgba(6, 10, 17, 0.82)),
+        linear-gradient(135deg, #13253e, #0a0f1b 48%, #1a1221);
+}
+
+.sceneB {
+    background:
+        linear-gradient(180deg, rgba(6, 10, 17, 0.08), rgba(6, 10, 17, 0.84)),
+        linear-gradient(135deg, #2a1022, #0e1628 54%, #0a1020);
+}
+
+.sceneGlow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.sceneContent {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    padding: 1.2rem;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.sceneKicker {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.58);
+    font-weight: 700;
+}
+
+.sceneTitle {
+    font-size: 1.45rem;
+    line-height: 0.98;
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+.sceneBody {
+    max-width: 88%;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.76);
+}
+
+.transitionOverlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.captionBand {
+    position: absolute;
+    left: 50%;
+    top: 65%;
+    transform: translate(-50%, -50%);
+    min-width: 68%;
+    max-width: 84%;
+    padding: 0.75rem 0.95rem;
+    border-radius: 20px;
+    background: rgba(6, 10, 18, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-align: center;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24);
+}
+
+.cardDescription {
+    font-size: 0.9rem;
+    line-height: 1.48;
+    color: #94a0b6;
+}
+
+@media (max-width: 720px) {
+    .page {
+        padding: 2rem 1rem 4rem;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}

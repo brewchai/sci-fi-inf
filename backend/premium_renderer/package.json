@@ -1,0 +1,15 @@
+{
+  "name": "premium-reel-renderer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.440",
+    "@remotion/renderer": "^4.0.340",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.340"
+  }
+}
