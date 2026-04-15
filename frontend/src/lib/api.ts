@@ -48,6 +48,7 @@ export type CarouselSlide = {
     category: string;
     headline: string;
     takeaways: string[];
+    slideTitles?: string[];
     caption?: string;
     imageUrl?: string;
     imageUrls?: string[];
@@ -223,7 +224,10 @@ export type ReelResponse = {
     video_url: string;
     episode_id: number;
     duration_seconds: number;
+    renderer: 'classic' | 'premium';
 };
+
+export type ReelRenderer = 'classic' | 'premium';
 
 export type VisualClip = {
     url: string;
@@ -301,6 +305,8 @@ export interface SceneAssetCandidate {
     duration_seconds?: number | null;
     query: string;
     score: number;
+    rationale?: string | null;
+    confidence?: number | null;
 }
 
 export interface SelectedSceneAsset {
@@ -321,6 +327,13 @@ export interface SceneTimelineItem {
     caption_text?: string | null;
     caption_is_custom?: boolean;
     effect_transition_name?: string;
+    scene_role?: string | null;
+    asset_bias?: 'video' | 'image' | 'either' | null;
+    scene_fx_name?: string | null;
+    scene_fx_strength?: number | null;
+    stock_match_rationale?: string | null;
+    fx_rationale?: string | null;
+    planning_confidence?: number | null;
     search_queries: string[];
     stock_candidates: SceneAssetCandidate[];
     selected_asset?: SelectedSceneAsset | null;
@@ -344,6 +357,293 @@ export interface WordTimestamp {
     end: number;
 }
 
+export interface PremiumSfxOption {
+    sound_id: string;
+    label: string;
+    filename: string;
+}
+
+export interface ReelSfxItem {
+    id: string;
+    sound_id: string;
+    start_time_seconds: number;
+    volume: number;
+}
+
+export interface SuggestedReelSfxCue {
+    sound_id: string;
+    start_time_seconds: number;
+    volume: number;
+    reason?: string | null;
+    confidence?: number | null;
+}
+
+export interface FactCheckClaim {
+    claim_id: string;
+    claim_text: string;
+    normalized_claim: string;
+    start_time_seconds: number;
+    end_time_seconds: number;
+    transcript_excerpt: string;
+    factuality_confidence: number;
+    suggested_queries: string[];
+}
+
+export interface FactCheckVideo {
+    job_id: string;
+    source_url: string;
+    title: string;
+    channel_name: string;
+    duration_seconds: number;
+    video_url: string;
+    audio_url: string;
+    transcript: string;
+    word_timestamps: WordTimestamp[];
+}
+
+export interface FactCheckPaperMatch {
+    source: string;
+    query?: string | null;
+    title: string;
+    authors: string[];
+    year?: number | null;
+    doi?: string | null;
+    openalex_id?: string | null;
+    abstract?: string | null;
+    paper_url?: string | null;
+    cited_by_count: number;
+    journal?: string | null;
+    verified: boolean;
+    verification_source?: string | null;
+    retrieval_score: number;
+    retrieval_notes: string[];
+    stance: 'supports' | 'refutes' | 'mixed' | 'tangential' | string;
+    relevance_score: number;
+    evidence_note?: string | null;
+    counted_in_tally: boolean;
+    counted_reason: 'counted' | 'tangential' | string;
+}
+
+export interface FactCheckAnalysis {
+    claim: FactCheckClaim;
+    analysis_claim_text: string;
+    look_dev_question: string;
+    clip_url: string;
+    clip_start_time_seconds: number;
+    clip_end_time_seconds: number;
+    overall_rating: number;
+    trust_label: string;
+    verdict_summary: string;
+    thirty_second_summary: string;
+    support_count: number;
+    refute_count: number;
+    mixed_count: number;
+    counted_paper_count: number;
+    tangential_count: number;
+    considered_but_not_counted_count: number;
+    queries_used: string[];
+    ai_fallback_used: boolean;
+    verified_paper_count: number;
+    papers: FactCheckPaperMatch[];
+    paper_links: string[];
+}
+
+export interface FactCheckStitchPreview {
+    claim: FactCheckClaim;
+    preview_url: string;
+    selected_start_time_seconds: number;
+    selected_end_time_seconds: number;
+    overlay_text: string;
+    tail_duration_seconds: number;
+}
+
+export interface FactCheckStitchLookDevPreview {
+    preview_url: string;
+    duration_seconds: number;
+    source_background_used: boolean;
+}
+
+export async function fetchPremiumSfxLibrary(): Promise<{ sounds: PremiumSfxOption[] }> {
+    const res = await fetch(`${API_URL}/content/premium-sfx-library`, { cache: 'no-store' });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Failed to fetch premium SFX library: ${err}`);
+    }
+    return res.json();
+}
+
+export async function ingestYoutubeForFactCheck(url: string): Promise<FactCheckVideo> {
+    const res = await fetch(`${API_URL}/fact-check/ingest-youtube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`YouTube ingest failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function extractFactCheckClaims(jobId: string): Promise<{ claims: FactCheckClaim[] }> {
+    const res = await fetch(`${API_URL}/fact-check/extract-claims`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Claim extraction failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function analyzeFactCheckClaim(
+    jobId: string,
+    claimId: string,
+    queries: string[] = [],
+    analysisClaimText: string = '',
+): Promise<FactCheckAnalysis> {
+    const res = await fetch(`${API_URL}/fact-check/analyze-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, claim_id: claimId, queries, analysis_claim_text: analysisClaimText }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Claim analysis failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function generateFactCheckHookQuestion(params: {
+    claimText: string;
+    trustLabel?: string;
+    verdictSummary?: string;
+}): Promise<{ question: string }> {
+    const res = await fetch(`${API_URL}/fact-check/generate-hook-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            claim_text: params.claimText,
+            trust_label: params.trustLabel ?? '',
+            verdict_summary: params.verdictSummary ?? '',
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Hook question generation failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function generateFactCheckStitchPreview(params: {
+    jobId: string;
+    claimId: string;
+    selectedStartTimeSeconds: number;
+    selectedEndTimeSeconds: number;
+    overlayText?: string;
+    overallRating?: number;
+    trustLabel?: string;
+    verdictSummary?: string;
+    thirtySecondSummary?: string;
+    supportCount?: number;
+    refuteCount?: number;
+    mixedCount?: number;
+}): Promise<FactCheckStitchPreview> {
+    const res = await fetch(`${API_URL}/fact-check/generate-stitch-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_id: params.jobId,
+            claim_id: params.claimId,
+            selected_start_time_seconds: params.selectedStartTimeSeconds,
+            selected_end_time_seconds: params.selectedEndTimeSeconds,
+            overlay_text: params.overlayText ?? 'STITCH INCOMING',
+            overall_rating: params.overallRating ?? 0,
+            trust_label: params.trustLabel ?? '',
+            verdict_summary: params.verdictSummary ?? '',
+            thirty_second_summary: params.thirtySecondSummary ?? '',
+            support_count: params.supportCount ?? 0,
+            refute_count: params.refuteCount ?? 0,
+            mixed_count: params.mixedCount ?? 0,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Stitch preview failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function renderFactCheckStitchLookDev(params: {
+    jobId?: string | null;
+    question: string;
+    rating: number;
+    trustLabel: string;
+    verdict: string;
+    rationale: string;
+    supportCount: number;
+    refuteCount: number;
+    mixedCount: number;
+    selectedStartTimeSeconds?: number;
+    selectedEndTimeSeconds?: number;
+    durationSeconds: number;
+    useSourceBackground?: boolean;
+}): Promise<FactCheckStitchLookDevPreview> {
+    const res = await fetch(`${API_URL}/fact-check/render-stitch-look-dev`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_id: params.jobId ?? null,
+            question: params.question,
+            rating: params.rating,
+            trust_label: params.trustLabel,
+            verdict: params.verdict,
+            rationale: params.rationale,
+            support_count: params.supportCount,
+            refute_count: params.refuteCount,
+            mixed_count: params.mixedCount,
+            selected_start_time_seconds: params.selectedStartTimeSeconds ?? 0,
+            selected_end_time_seconds: params.selectedEndTimeSeconds ?? 0,
+            duration_seconds: params.durationSeconds,
+            use_source_background: params.useSourceBackground ?? true,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Remotion stitch look dev failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function autoPlacePremiumSfx(params: {
+    headline?: string;
+    script?: string;
+    durationSeconds: number;
+    wordTimestamps: WordTimestamp[];
+    scenes: SceneTimelineItem[];
+    maxCues?: number;
+}): Promise<{ cues: SuggestedReelSfxCue[]; mode: string }> {
+    const res = await fetch(`${API_URL}/content/auto-place-sfx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            headline: params.headline ?? '',
+            script: params.script ?? '',
+            duration_seconds: params.durationSeconds,
+            word_timestamps: params.wordTimestamps,
+            scenes: params.scenes,
+            max_cues: params.maxCues ?? 5,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Auto place premium SFX failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function compileAudioTimeline(params: {
     script?: string;
     voice: string;
@@ -354,12 +654,14 @@ export async function compileAudioTimeline(params: {
     elevenlabsStyle?: number;
     audioFile?: File | null;
     transcriptText?: string;
+    splitScenesBySentence?: boolean;
 }): Promise<{ audio_url: string; timeline: AnchorWord[]; scenes: SceneTimelineItem[]; duration: number; word_timestamps: WordTimestamp[]; rewritten_script: string; display_script: string }> {
     let res: Response;
     if (params.audioFile) {
         const formData = new FormData();
         formData.append('audio_file', params.audioFile);
         if (params.transcriptText?.trim()) formData.append('transcript_text', params.transcriptText.trim());
+        formData.append('split_scenes_by_sentence', String(params.splitScenesBySentence ?? true));
         res = await fetch(`${API_URL}/content/compile-uploaded-audio-timeline`, {
             method: 'POST',
             body: formData,
@@ -376,6 +678,7 @@ export async function compileAudioTimeline(params: {
                 elevenlabs_stability: params.elevenlabsStability ?? 0.65,
                 elevenlabs_similarity_boost: params.elevenlabsSimilarityBoost ?? 0.85,
                 elevenlabs_style: params.elevenlabsStyle ?? 0.1,
+                split_scenes_by_sentence: params.splitScenesBySentence ?? true,
             }),
         });
     }
@@ -433,6 +736,65 @@ export async function uploadSceneAsset(file: File): Promise<{
     return res.json();
 }
 
+export type UploadedVideoTranscriptResponse = {
+    transcript_text: string;
+    duration_seconds: number;
+    word_timestamps: WordTimestamp[];
+};
+
+export async function extractUploadedVideoTranscript(assetUrl: string): Promise<UploadedVideoTranscriptResponse> {
+    const res = await fetch(`${API_URL}/content/extract-uploaded-video-transcript`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_url: assetUrl }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Extract uploaded video transcript failed: ${err}`);
+    }
+    return res.json();
+}
+
+export type VideoTextFxBeatPayload = {
+    id: string;
+    text: string;
+    start_time_seconds: number;
+    end_time_seconds: number;
+    layer: string;
+    style: string;
+    notes: string;
+};
+
+export type RenderUploadedVideoTextFxResponse = {
+    preview_url: string;
+    duration_seconds: number;
+};
+
+export async function renderUploadedVideoTextFx(params: {
+    sourceVideoUrl: string;
+    transcriptText: string;
+    stylePreset: string;
+    durationSeconds: number;
+    beats: VideoTextFxBeatPayload[];
+}): Promise<RenderUploadedVideoTextFxResponse> {
+    const res = await fetch(`${API_URL}/content/render-uploaded-video-text-fx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            source_video_url: params.sourceVideoUrl,
+            transcript_text: params.transcriptText,
+            style_preset: params.stylePreset,
+            duration_seconds: params.durationSeconds,
+            beats: params.beats,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Render uploaded video text FX failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function generateImagePrompt(text: string): Promise<{ prompt: string }> {
     const res = await fetch(`${API_URL}/content/generate-image-prompt`, {
         method: 'POST',
@@ -446,11 +808,13 @@ export async function generateImagePrompt(text: string): Promise<{ prompt: strin
     return res.json();
 }
 
-export async function generateImage(prompt: string, style?: string): Promise<{ image_url: string }> {
+export type GeneratedImageAspect = 'portrait_9_16' | 'square_1_1';
+
+export async function generateImage(prompt: string, style?: string, aspect?: GeneratedImageAspect): Promise<{ image_url: string }> {
     const res = await fetch(`${API_URL}/content/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, style }),
+        body: JSON.stringify({ prompt, style, aspect }),
     });
     if (!res.ok) {
         const err = await res.text();
@@ -520,11 +884,22 @@ export async function generateSceneAiFallbacks(
 export async function generateSingleSceneAiPrompt(
     script: string,
     scene: SceneTimelineItem,
-): Promise<{ prompt: string; effect_transition_name?: string | null }> {
+    scenes?: SceneTimelineItem[],
+): Promise<{
+    prompt: string;
+    effect_transition_name?: string | null;
+    scene_role?: string | null;
+    asset_bias?: string | null;
+    scene_fx_name?: string | null;
+    scene_fx_strength?: number | null;
+    stock_match_rationale?: string | null;
+    fx_rationale?: string | null;
+    planning_confidence?: number | null;
+}> {
     const res = await fetch(`${API_URL}/content/generate-single-scene-ai-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script, scene }),
+        body: JSON.stringify({ script, scene, scenes }),
     });
     if (!res.ok) {
         const err = await res.text();
@@ -551,6 +926,7 @@ export async function refetchSceneCandidates(
 }
 
 export async function generateReel(
+    renderer: ReelRenderer,
     episodeId: number | null,
     headline: string,
     startSeconds: number = 0,
@@ -572,15 +948,16 @@ export async function generateReel(
     sceneTimeline?: SceneTimelineItem[],
     audioUrl?: string,
     wordTimestamps?: { word: string, start: number, end: number }[],
+    sfxTimeline?: ReelSfxItem[],
     includeWaveform: boolean = true,
 ): Promise<ReelResponse> {
     let endpoint: string;
     if (episodeId) {
-        endpoint = `${API_URL}/podcast/episode/${episodeId}/generate-reel`;
+        endpoint = `${API_URL}/podcast/episode/${episodeId}/${renderer === 'premium' ? 'generate-premium-reel' : 'generate-reel'}`;
     } else if (paperId) {
-        endpoint = `${API_URL}/content/paper/${paperId}/generate-reel?content_type=${contentType}`;
+        endpoint = `${API_URL}/content/paper/${paperId}/${renderer === 'premium' ? 'generate-premium-reel' : 'generate-reel'}?content_type=${contentType}`;
     } else {
-        endpoint = `${API_URL}/content/custom/generate-reel`;
+        endpoint = `${API_URL}/content/custom/${renderer === 'premium' ? 'generate-premium-reel' : 'generate-reel'}`;
     }
 
     const res = await fetch(endpoint, {
@@ -605,6 +982,7 @@ export async function generateReel(
             ...(sceneTimeline?.length ? { scene_timeline: sceneTimeline } : {}),
             ...(audioUrl ? { audio_url: audioUrl } : {}),
             ...(wordTimestamps?.length ? { word_timestamps: wordTimestamps } : {}),
+            ...(sfxTimeline?.length ? { sfx_timeline: sfxTimeline } : {}),
             include_waveform: includeWaveform,
         }),
     });

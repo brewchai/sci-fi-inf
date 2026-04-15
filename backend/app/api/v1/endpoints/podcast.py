@@ -391,16 +391,32 @@ class SelectedSceneAsset(BaseModel):
 class SceneTimelineEvent(BaseModel):
     scene_id: str
     anchor_word: str
+    visual_focus_word: Optional[str] = None
+    anchor_phrase: Optional[str] = None
     start_time_seconds: float
     end_time_seconds: float
     transcript_excerpt: Optional[str] = None
     caption_text: Optional[str] = None
     caption_is_custom: bool = False
     effect_transition_name: Optional[str] = None
+    scene_role: Optional[str] = None
+    asset_bias: Optional[str] = None
+    scene_fx_name: Optional[str] = None
+    scene_fx_strength: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    stock_match_rationale: Optional[str] = None
+    fx_rationale: Optional[str] = None
+    planning_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     selected_asset: Optional[SelectedSceneAsset] = None
     ai_prompt: Optional[str] = None
     ai_image_url: Optional[str] = None
     asset_source: str = Field(default="none", description="local_image | local_video | stock_image | stock_video | ai_image | user_image | user_video | none")
+
+
+class SfxTimelineEvent(BaseModel):
+    id: Optional[str] = None
+    sound_id: str
+    start_time_seconds: float
+    volume: float = Field(default=0.45, ge=0.0, le=1.0)
 
 class GenerateReelRequest(BaseModel):
     """Request to generate a vertical waveform reel."""
@@ -423,6 +439,7 @@ class GenerateReelRequest(BaseModel):
     anchor_timeline: Optional[List[TimelineEvent]] = Field(default=None, description="Exact spoken-word timeline for explicit AI image pacing")
     scene_timeline: Optional[List[SceneTimelineEvent]] = Field(default=None, description="Resolved mixed-asset scene timeline for the custom reel flow")
     word_timestamps: Optional[List[dict]] = Field(default=None, description="Pre-computed Whisper word timestamps to skip regeneration")
+    sfx_timeline: Optional[List[SfxTimelineEvent]] = Field(default=None, description="Timed premium sound effects aligned to the narration timeline")
     include_waveform: bool = Field(default=True, description="Whether to render the animated waveform overlay")
 
 
@@ -431,6 +448,7 @@ class ReelResponse(BaseModel):
     video_url: str
     episode_id: int
     duration_seconds: float
+    renderer: str = "classic"
 
 
 @router.post(
@@ -465,6 +483,25 @@ async def generate_reel(
     if request.background_clip_urls and len(request.background_clip_urls) > 0:
         from app.services.visual_search import download_clips_from_urls
         clip_paths = await download_clips_from_urls(request.background_clip_urls)
+    elif request.auto_visuals:
+        logger.info("Auto-visuals enabled for premium renderer: fetching Pexels stock footage")
+        from app.services.visual_search import extract_visual_keywords, search_stock_clips, download_clip
+        headline = request.headline or ""
+        script = request.custom_text or (episode.script or "")
+        if headline or script:
+            keywords = await extract_visual_keywords(headline, script)
+            if keywords:
+                clips = await search_stock_clips(keywords, orientation="portrait")
+                if clips:
+                    paths = []
+                    for clip in clips:
+                        try:
+                            path = await download_clip(clip)
+                            paths.append(path)
+                        except Exception as e:
+                            logger.error(f"Failed to download clip '{clip.keyword}': {e}")
+                    if paths:
+                        clip_paths = paths
     elif request.auto_visuals:
         logger.info("Auto-visuals enabled: fetching Pexels stock footage")
         from app.services.visual_search import extract_visual_keywords, search_stock_clips, download_clip
@@ -522,6 +559,79 @@ async def generate_reel(
         video_url=video_url,
         episode_id=episode_id,
         duration_seconds=request.duration_seconds,
+        renderer="classic",
+    )
+
+
+@router.post(
+    "/episode/{episode_id}/generate-premium-reel",
+    response_model=ReelResponse,
+    summary="Generate a premium Remotion reel",
+)
+async def generate_premium_reel(
+    episode_id: int,
+    request: GenerateReelRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ReelResponse:
+    from app.services.premium_reel_renderer import PremiumReelRenderer
+
+    result = await db.execute(
+        select(PodcastEpisode).where(PodcastEpisode.id == episode_id)
+    )
+    episode = result.scalar_one_or_none()
+
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if not episode.audio_url and not request.custom_text:
+        raise HTTPException(status_code=400, detail="Episode has no audio and no custom text provided")
+
+    clip_paths = None
+    if request.background_clip_urls and len(request.background_clip_urls) > 0:
+        from app.services.visual_search import download_clips_from_urls
+        clip_paths = await download_clips_from_urls(request.background_clip_urls)
+
+    temp_clip_paths = clip_paths or []
+
+    try:
+        renderer = PremiumReelRenderer()
+        video_url = await renderer.generate(
+            episode_id=episode_id,
+            audio_url=episode.audio_url or "",
+            headline=request.headline,
+            start_seconds=request.start_seconds,
+            duration_seconds=request.duration_seconds,
+            custom_text=request.custom_text,
+            transcript_text=episode.script or "",
+            closing_statement=request.closing_statement,
+            background_video_url=request.background_video_url if not clip_paths else None,
+            overlay_video_url=request.overlay_video_url,
+            background_clip_paths=clip_paths,
+            anchor_timeline=request.anchor_timeline,
+            scene_timeline=request.scene_timeline,
+            word_timestamps=request.word_timestamps,
+            sfx_timeline=request.sfx_timeline,
+            voice=request.voice,
+            speed=request.speed,
+            elevenlabs_stability=request.elevenlabs_stability,
+            elevenlabs_similarity_boost=request.elevenlabs_similarity_boost,
+            elevenlabs_style=request.elevenlabs_style,
+            tts_provider=request.tts_provider,
+            include_waveform=request.include_waveform,
+        )
+    finally:
+        import os
+        for p in temp_clip_paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    return ReelResponse(
+        video_url=video_url,
+        episode_id=episode_id,
+        duration_seconds=request.duration_seconds,
+        renderer="premium",
     )
 
 @router.post(

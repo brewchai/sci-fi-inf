@@ -372,6 +372,12 @@
     position: relative;
 }
 
+.portraitSlideWrapper {
+    width: 270px;
+    height: 480px;
+    flex: 0 0 270px;
+}
+
 /* Individual Slide (Strict 1080x1080 emulation) */
 .slide {
     width: 1080px;
@@ -391,6 +397,14 @@
     overflow: hidden;
     /* Force html2canvas to use sans-serif instead of falling back to Times New Roman */
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.portraitSlide {
+    width: 1080px;
+    height: 1920px;
+    min-width: 1080px;
+    min-height: 1920px;
+    transform: scale(0.25);
 }
 
 /* Beautiful radial gradient background override per slide */
@@ -417,11 +431,19 @@
     /* Prevent text from escaping boundaries */
 }
 
+.portraitSlideContent {
+    padding: 120px 110px 220px;
+}
+
 .slideHeader {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 60px;
+}
+
+.portraitSlideHeader {
+    margin-bottom: 90px;
 }
 
 .brandName {
@@ -502,6 +524,12 @@
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
+.portraitHookHeadline {
+    font-size: 5.2rem;
+    line-height: 1.06;
+    margin-bottom: 0;
+}
+
 /* Standalone Takeaway Content */
 .standaloneTakeawayWrapper {
     flex: 1;
@@ -512,16 +540,54 @@
     /* Indent slightly for readability */
 }
 
+.middleSlideTakeawayWrapper {
+    justify-content: flex-end;
+    padding: 72px 40px 96px;
+}
+
 .standaloneTakeawayText {
-    font-size: 3.2rem;
-    line-height: 1.4;
+    font-size: 2.05rem;
+    line-height: 1.28;
     color: #ffffff;
-    font-weight: 500;
+    font-weight: 460;
 
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
     max-width: 100%;
+}
+
+.middleSlideTakeawayText {
+    font-size: 2.34rem;
+    line-height: 1.22;
+}
+
+.customSlideTitle {
+    font-size: 3.05rem;
+    font-weight: 900;
+    line-height: 0.98;
+    color: #c8fff3;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    margin-bottom: 1.35rem;
+    text-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+    max-width: 100%;
+}
+
+.middleSlideTitle {
+    font-size: 3.45rem;
+    line-height: 1.02;
+    margin-bottom: 1.55rem;
+}
+
+.customCtaTitle {
+    color: #c8fff3;
+    font-size: 3.3rem;
+    font-weight: 900;
+    line-height: 0.98;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    text-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
 }
 
 .publishedYear {
@@ -533,6 +599,11 @@
     text-transform: uppercase;
 }
 
+.middleSlidePublishedYear {
+    font-size: 2.6rem;
+    margin-bottom: 28px;
+}
+
 .slideFooter {
     margin-top: auto;
     display: flex;
@@ -540,6 +611,12 @@
     align-items: center;
     padding-top: 40px;
     border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.portraitSlideFooter {
+    padding-top: 28px;
+    padding-bottom: 220px;
+    border-top: 2px solid rgba(255, 255, 255, 0.12);
 }
 
 .footerWebsite {
@@ -572,6 +649,11 @@
     letter-spacing: 0.1em;
     text-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     opacity: 0.9;
+}
+
+.portraitFooterSwipeLarge {
+    font-size: 2.35rem;
+    letter-spacing: 0.08em;
 }
 
 /* Copy text container */
