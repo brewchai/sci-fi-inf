@@ -401,6 +401,14 @@ export interface FactCheckVideo {
     word_timestamps: WordTimestamp[];
 }
 
+export interface PublicFactCheckVideo {
+    job_id: string;
+    source_url: string;
+    title: string;
+    channel_name: string;
+    duration_seconds: number;
+}
+
 export interface FactCheckPaperMatch {
     source: string;
     query?: string | null;
@@ -448,6 +456,24 @@ export interface FactCheckAnalysis {
     paper_links: string[];
 }
 
+export interface PublicFactCheckAnalysis {
+    claim?: FactCheckClaim | null;
+    executed_claim_text: string;
+    overall_rating: number;
+    trust_label: string;
+    verdict_summary: string;
+    thirty_second_summary: string;
+    support_count: number;
+    refute_count: number;
+    mixed_count: number;
+    counted_paper_count: number;
+    tangential_count: number;
+    considered_but_not_counted_count: number;
+    verified_paper_count: number;
+    papers: FactCheckPaperMatch[];
+    paper_links: string[];
+}
+
 export interface FactCheckStitchPreview {
     claim: FactCheckClaim;
     preview_url: string;
@@ -485,6 +511,19 @@ export async function ingestYoutubeForFactCheck(url: string): Promise<FactCheckV
     return res.json();
 }
 
+export async function ingestYoutubeForPublicFactCheck(url: string): Promise<PublicFactCheckVideo> {
+    const res = await fetch(`${API_URL}/fact-check/public/ingest-youtube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`YouTube ingest failed: ${err}`);
+    }
+    return res.json();
+}
+
 export async function extractFactCheckClaims(jobId: string): Promise<{ claims: FactCheckClaim[] }> {
     const res = await fetch(`${API_URL}/fact-check/extract-claims`, {
         method: 'POST',
@@ -494,6 +533,27 @@ export async function extractFactCheckClaims(jobId: string): Promise<{ claims: F
     if (!res.ok) {
         const err = await res.text();
         throw new Error(`Claim extraction failed: ${err}`);
+    }
+    return res.json();
+}
+
+export async function analyzePublicFactCheckClaim(params: {
+    jobId: string;
+    claimId?: string | null;
+    customClaimText?: string;
+}): Promise<PublicFactCheckAnalysis> {
+    const res = await fetch(`${API_URL}/fact-check/public/analyze-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_id: params.jobId,
+            claim_id: params.claimId ?? null,
+            custom_claim_text: params.customClaimText ?? '',
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Claim analysis failed: ${err}`);
     }
     return res.json();
 }

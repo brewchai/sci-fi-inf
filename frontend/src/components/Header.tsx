@@ -57,6 +57,7 @@ export function Header() {
                         user ? (
                             <>
                                 <Link href="/feed" className={styles.navLink}>My Feed</Link>
+                                <Link href="/fact-check" className={`${styles.navLink} ${pathname === '/' ? styles.claimCheckLink : ''}`}>Claim Check</Link>
                                 {pathname !== '/feed' && <Link href="/episodes" className={styles.navLink}>Samples</Link>}
                                 <Link href="/mission" className={styles.navLink}>Mission</Link>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>
@@ -67,6 +68,7 @@ export function Header() {
                         ) : (
                             <>
                                 <Link href="/#how-it-works" className={styles.navLink}>How It Works</Link>
+                                <Link href="/fact-check" className={`${styles.navLink} ${pathname === '/' ? styles.claimCheckLink : ''}`}>Claim Check</Link>
                                 <Link href="/episodes" className={styles.navLink}>Samples</Link>
                                 <Link href="/mission" className={styles.navLink}>Mission</Link>
                                 <Link href="/faq" className={styles.navLink}>FAQ</Link>

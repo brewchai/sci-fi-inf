@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,6 +46,56 @@ def _read_json(path: Path) -> dict | list:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _read_optional_json(path: Path) -> dict | list | None:
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _claim_lookup(claims: list[dict], claim_id: str | None) -> dict | None:
+    if not claim_id:
+        return None
+    return next((claim for claim in claims if str(claim.get("claim_id")) == claim_id), None)
+
+
+def _best_transcript_excerpt(transcript: str, claim_text: str, max_chars: int = 280) -> str:
+    transcript_text = str(transcript or "").strip()
+    claim = str(claim_text or "").strip()
+    if not transcript_text or not claim:
+        return ""
+
+    claim_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]{4,}", claim.lower())
+    }
+    if not claim_tokens:
+        return transcript_text[:max_chars].strip()
+
+    sentences = [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+", transcript_text)
+        if part.strip()
+    ] or [transcript_text]
+
+    best_sentence = ""
+    best_score = -1
+    claim_lower = claim.lower()
+    for sentence in sentences:
+        sentence_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9]{4,}", sentence.lower())
+        }
+        overlap = len(claim_tokens.intersection(sentence_tokens))
+        if claim_lower in sentence.lower():
+            overlap += 4
+        if overlap > best_score:
+            best_score = overlap
+            best_sentence = sentence
+
+    excerpt = best_sentence or transcript_text
+    return excerpt[:max_chars].strip()
+
+
 class FactCheckWordTimestamp(BaseModel):
     word: str
     start: float
@@ -76,6 +127,14 @@ class IngestYoutubeResponse(BaseModel):
     audio_url: str
     transcript: str
     word_timestamps: list[FactCheckWordTimestamp]
+
+
+class PublicIngestYoutubeResponse(BaseModel):
+    job_id: str
+    source_url: str
+    title: str
+    channel_name: str = ""
+    duration_seconds: float = 0.0
 
 
 class ExtractClaimsRequest(BaseModel):
@@ -116,6 +175,12 @@ class AnalyzeClaimRequest(BaseModel):
     analysis_claim_text: str = ""
 
 
+class PublicAnalyzeClaimRequest(BaseModel):
+    job_id: str
+    claim_id: str | None = None
+    custom_claim_text: str = ""
+
+
 class AnalyzeClaimResponse(BaseModel):
     claim: FactCheckClaim
     analysis_claim_text: str
@@ -135,6 +200,24 @@ class AnalyzeClaimResponse(BaseModel):
     considered_but_not_counted_count: int = 0
     queries_used: list[str] = Field(default_factory=list)
     ai_fallback_used: bool = False
+    verified_paper_count: int = 0
+    papers: list[FactCheckPaperMatch]
+    paper_links: list[str] = Field(default_factory=list)
+
+
+class PublicAnalyzeClaimResponse(BaseModel):
+    claim: FactCheckClaim | None = None
+    executed_claim_text: str
+    overall_rating: float = Field(ge=1.0, le=5.0)
+    trust_label: str
+    verdict_summary: str
+    thirty_second_summary: str
+    support_count: int = 0
+    refute_count: int = 0
+    mixed_count: int = 0
+    counted_paper_count: int = 0
+    tangential_count: int = 0
+    considered_but_not_counted_count: int = 0
     verified_paper_count: int = 0
     papers: list[FactCheckPaperMatch]
     paper_links: list[str] = Field(default_factory=list)
@@ -207,6 +290,23 @@ async def ingest_youtube(request: IngestYoutubeRequest):
     return IngestYoutubeResponse(**payload)
 
 
+@router.post("/public/ingest-youtube", response_model=PublicIngestYoutubeResponse)
+async def public_ingest_youtube(request: IngestYoutubeRequest):
+    try:
+        payload = await ingest_youtube_video(request.url)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to ingest video: {exc}") from exc
+
+    _write_json(_job_file(payload["job_id"]), payload)
+    return PublicIngestYoutubeResponse(
+        job_id=payload["job_id"],
+        source_url=payload["source_url"],
+        title=payload["title"],
+        channel_name=payload.get("channel_name") or "",
+        duration_seconds=float(payload.get("duration_seconds") or 0.0),
+    )
+
+
 @router.post("/extract-claims", response_model=ExtractClaimsResponse)
 async def extract_claims(request: ExtractClaimsRequest):
     try:
@@ -245,6 +345,79 @@ async def generate_hook_question(request: GenerateHookQuestionRequest):
         raise HTTPException(status_code=500, detail=f"Failed to generate hook question: {exc}") from exc
 
     return GenerateHookQuestionResponse(question=question)
+
+
+@router.post("/public/analyze-claim", response_model=PublicAnalyzeClaimResponse)
+async def public_analyze_claim(request: PublicAnalyzeClaimRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        job = _read_json(_job_file(request.job_id))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Fact-check job not found") from exc
+
+    claims_payload = _read_optional_json(_claims_file(request.job_id))
+    claims = list(claims_payload) if isinstance(claims_payload, list) else []
+    selected = _claim_lookup(claims, request.claim_id)
+    if request.claim_id and not selected:
+        raise HTTPException(status_code=404, detail="Selected claim not found")
+
+    custom_claim_text = str(request.custom_claim_text or "").strip()
+    analysis_claim_text = custom_claim_text
+    if not analysis_claim_text and selected:
+        analysis_claim_text = str(selected.get("claim_text") or "").strip()
+    if not analysis_claim_text:
+        raise HTTPException(status_code=400, detail="Either claim_id or custom_claim_text is required")
+
+    transcript_excerpt = (
+        str(selected.get("transcript_excerpt") or "").strip()
+        if selected
+        else _best_transcript_excerpt(str(job.get("transcript") or ""), analysis_claim_text)
+    )
+
+    try:
+        papers = await retrieve_openalex_papers_for_claim(
+            db=db,
+            claim_text=analysis_claim_text,
+            normalized_claim=analysis_claim_text,
+            transcript_excerpt=transcript_excerpt,
+            override_queries=[],
+        )
+        analysis = await analyze_claim_against_papers(
+            claim={
+                **(selected or {}),
+                "claim_text": analysis_claim_text,
+                "normalized_claim": analysis_claim_text,
+                "transcript_excerpt": transcript_excerpt,
+            },
+            papers=papers["papers"],
+            queries_used=papers["queries_used"],
+            ai_fallback_used=bool(papers.get("verified_ai_fallback_count")),
+        )
+    except Exception as exc:
+        logger.exception(
+            "Public fact-check claim analysis failed",
+            job_id=request.job_id,
+            claim_id=request.claim_id,
+            analysis_claim_text=analysis_claim_text,
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to analyze claim: {exc}") from exc
+
+    return PublicAnalyzeClaimResponse(
+        claim=FactCheckClaim(**selected) if selected else None,
+        executed_claim_text=analysis_claim_text,
+        overall_rating=analysis["overall_rating"],
+        trust_label=analysis["trust_label"],
+        verdict_summary=analysis["verdict_summary"],
+        thirty_second_summary=analysis["thirty_second_summary"],
+        support_count=analysis["support_count"],
+        refute_count=analysis["refute_count"],
+        mixed_count=analysis["mixed_count"],
+        counted_paper_count=analysis["counted_paper_count"],
+        tangential_count=analysis["tangential_count"],
+        considered_but_not_counted_count=analysis["considered_but_not_counted_count"],
+        verified_paper_count=analysis["verified_paper_count"],
+        papers=[FactCheckPaperMatch(**paper) for paper in analysis["papers"]],
+        paper_links=analysis["paper_links"],
+    )
 
 
 @router.post("/analyze-claim", response_model=AnalyzeClaimResponse)

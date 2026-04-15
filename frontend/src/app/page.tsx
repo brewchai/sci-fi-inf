@@ -6,6 +6,7 @@ import {
     ArrowRight,
     Newspaper,
     Filter,
+    SearchCheck,
 } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -270,6 +271,25 @@ export default async function LandingPage() {
                                     <p>{cat.desc}</p>
                                 </div>
                             ))}
+                        </div>
+                    </section>
+
+                    <section className={styles.factCheckSpotlight}>
+                        <div className={styles.factCheckSpotlightCard}>
+                            <div className={styles.factCheckSpotlightCopy}>
+                                <div className={styles.factCheckSpotlightEyebrow}>
+                                    <SearchCheck size={16} />
+                                    New public tool
+                                </div>
+                                <h2>Fact-check a YouTube Short against real papers.</h2>
+                                <p>
+                                    Paste a YouTube Short link, extract the strongest scientific claims, and get
+                                    a concise research-backed verdict on what actually holds up.
+                                </p>
+                            </div>
+                            <Link href="/fact-check" className="btn btn-primary btn-large">
+                                Try Claim Check <ArrowRight size={18} />
+                            </Link>
                         </div>
                     </section>
 

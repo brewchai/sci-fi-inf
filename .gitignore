@@ -56,3 +56,18 @@ backend/static/audio_previews/
 backend/static/carousel_images/
 
 frontend/public/static/background_videos/*
+
+# Generated editor / reel / fact-check artifacts
+backend/static/fact_checker/
+backend/static/reels/
+backend/static/user_uploads/
+backend/static/video_text_fx/
+
+# Local docs exports / generated analysis
+docs/*.html
+docs/*.pdf
+
+# Optional: keep rendered premium artifacts out of git
+backend/premium_renderer/out/
+backend/premium_renderer/dist/
+
