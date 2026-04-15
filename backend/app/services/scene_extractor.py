@@ -5,8 +5,7 @@ Used exclusively for generating FLUX.1 images for the advanced Custom Reel gener
 import json
 import math
 from loguru import logger
-from openai import AsyncOpenAI
-from app.core.config import settings
+from app.services.llm_router import complete_text
 
 async def extract_scene_prompts(script: str) -> list[str]:
     """
@@ -30,8 +29,6 @@ async def extract_scene_prompts(script: str) -> list[str]:
     
     logger.info(f"Extracting {num_prompts} scene prompts for {words} words (~{duration_seconds:.1f}s)")
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
     prompt = (
         "You are an elite AI cinematic director creating visual prompts for an AI image generator (FLUX.1). "
         "Your task is to break down the provided narration script into a series of highly descriptive, striking visual prompts.\n\n"
@@ -52,14 +49,15 @@ async def extract_scene_prompts(script: str) -> list[str]:
     )
 
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
+        resp = await complete_text(
+            capability="scene_extraction",
+            default_openai_model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.7,
             max_tokens=2000,
         )
-        raw = resp.choices[0].message.content
+        raw = resp.text
         data = json.loads(raw)
         
         prompts = data.get("prompts", [])

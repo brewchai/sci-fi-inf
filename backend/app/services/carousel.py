@@ -7,11 +7,10 @@ from scientific paper summaries on the fly.
 import json
 from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from openai import AsyncOpenAI
 from loguru import logger
 
-from app.core.config import settings
 from app.models.paper import Paper
+from app.services.llm_router import complete_text
 
 
 class CarouselGenerator:
@@ -43,7 +42,6 @@ Rules:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         
     def _format_papers_for_prompt(self, papers: List[Paper]) -> str:
         """Format papers into content for the LLM prompt."""
@@ -128,8 +126,9 @@ PAPER CONTENT:
         logger.info(f"Generating on-the-fly carousel content for {len(papers)} papers")
         
         try:
-            response = await self.llm.chat.completions.create(
-                model="gpt-4o-mini",
+            response = await complete_text(
+                capability="carousel_copy",
+                default_openai_model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -139,7 +138,7 @@ PAPER CONTENT:
                 max_tokens=2000,
             )
             
-            result_str = response.choices[0].message.content
+            result_str = response.text
             result_json = json.loads(result_str)
             
             slides = result_json.get("slides", [])
@@ -315,8 +314,9 @@ PAPER CONTENT:
         model = "gpt-4o" if content_type == "daily-science" else "gpt-4o-mini"
 
         try:
-            response = await self.llm.chat.completions.create(
-                model=model,
+            response = await complete_text(
+                capability="carousel_copy",
+                default_openai_model=model,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -326,10 +326,13 @@ PAPER CONTENT:
                 max_tokens=3000,
             )
             
-            result_str = response.choices[0].message.content
+            result_str = response.text
             slide = json.loads(result_str)
             
-            logger.info(f"Successfully generated carousel for paper {paper.id} (model={model})")
+            logger.info(
+                f"Successfully generated carousel for paper {paper.id} "
+                f"(provider={response.provider}, model={response.model})"
+            )
             return slide
             
         except Exception as e:

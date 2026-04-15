@@ -2,24 +2,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from loguru import logger
 import json
-from openai import AsyncOpenAI
 
 from app.core.config import settings
 from app.models.paper import Paper
 from app.services.fetcher import FullTextFetcher
+from app.services.llm_router import complete_text
 
 class EditorEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
         self.fetcher = FullTextFetcher()
 
     async def generate_summary(self, paper: Paper) -> bool:
         """
         Generate ELI5 summary using LLM with rich context.
         """
-        if not self.client:
-            logger.warning("OpenAI API Key missing. Skipping summarization.")
+        if not (settings.OPENAI_API_KEY or settings.GEMINI_API_KEY):
+            logger.warning("No text LLM credentials configured. Skipping summarization.")
             return False
 
         # 1. Try to fetch full text for richer context
@@ -92,16 +91,17 @@ Output valid JSON with:
 Transform this into an engaging story for curious non-experts. Make sure to highlight the actual results and real-world implications."""
 
         try:
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+            response = await complete_text(
+                capability="summaries",
+                default_openai_model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
             
-            content = response.choices[0].message.content
+            content = response.text
             data = json.loads(content)
             
             paper.headline = data.get("headline", paper.title)

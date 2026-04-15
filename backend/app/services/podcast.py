@@ -8,13 +8,12 @@ from datetime import date
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from openai import AsyncOpenAI
 from loguru import logger
 from slugify import slugify
 
-from app.core.config import settings
 from app.models.paper import Paper
 from app.models.podcast import PodcastEpisode
+from app.services.llm_router import complete_text
 from app.services.tts import TTSGenerator
 
 
@@ -77,7 +76,6 @@ Write the script as a single block of flowing text, ready to be read aloud."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.tts = TTSGenerator()
     
     async def fetch_papers(self, paper_ids: List[int]) -> List[Paper]:
@@ -116,8 +114,9 @@ Why it matters: {why_it_matters}"""
         
         logger.info(f"Generating podcast script for {len(papers)} papers")
         
-        response = await self.llm.chat.completions.create(
-            model="gpt-4o-mini",
+        response = await complete_text(
+            capability="podcast_script",
+            default_openai_model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": self.SCRIPT_SYSTEM_PROMPT},
                 {"role": "user", "content": self.SCRIPT_USER_TEMPLATE.format(
@@ -128,7 +127,7 @@ Why it matters: {why_it_matters}"""
             max_tokens=1000,
         )
         
-        script = response.choices[0].message.content
+        script = response.text
         logger.info(f"Generated script: {len(script)} chars")
         
         return script
@@ -140,8 +139,9 @@ Why it matters: {why_it_matters}"""
         )
         
         try:
-            response = await self.llm.chat.completions.create(
-                model="gpt-4o-mini",
+            response = await complete_text(
+                capability="podcast_title",
+                default_openai_model="gpt-4o-mini",
                 messages=[{
                     "role": "user",
                     "content": f"""Generate a short, compelling podcast episode title (6-10 words max) based on these research papers:
@@ -160,7 +160,7 @@ Return ONLY the title, nothing else."""
                 temperature=0.8,
                 max_tokens=30,
             )
-            title = response.choices[0].message.content.strip().strip('"\'')
+            title = response.text.strip().strip('"\'')
             logger.info(f"Generated episode title: {title}")
             return title
         except Exception as e:
@@ -249,4 +249,3 @@ Return ONLY the title, nothing else."""
             raise
         
         return episode
-

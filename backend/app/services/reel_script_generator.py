@@ -5,11 +5,10 @@ Uses GPT-4o-mini to generate a tight, hook-driven narration script
 from a paper's metadata, optimised for ~30-second Instagram Reels.
 """
 import json
-from openai import AsyncOpenAI
 from loguru import logger
 
-from app.core.config import settings
 from app.models.paper import Paper
+from app.services.llm_router import complete_text
 
 
 SYSTEM_PROMPT = """You are a world-class science communicator and short-form video scriptwriter.
@@ -36,7 +35,7 @@ class ReelScriptGenerator:
     """Generates reel narration scripts from paper metadata using LLM."""
 
     def __init__(self):
-        self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        pass
 
     async def generate(self, paper: Paper, content_type: str = "latest") -> dict:
         """
@@ -90,8 +89,9 @@ PAPER:
         logger.info(f"Generating reel script for paper {paper.id}: {paper.title[:60]}")
 
         try:
-            response = await self.llm.chat.completions.create(
-                model="gpt-4o-mini",
+            response = await complete_text(
+                capability="reel_script",
+                default_openai_model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -101,7 +101,7 @@ PAPER:
                 max_tokens=500,
             )
 
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response.text)
             logger.info(f"Generated reel script for paper {paper.id} ({len(result.get('script', ''))} chars)")
             return {
                 "script": result.get("script", ""),

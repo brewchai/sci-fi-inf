@@ -3,8 +3,7 @@ Engine for extracting precise Anchor Word-driven timelines from generated Audio 
 """
 import json
 from loguru import logger
-from openai import AsyncOpenAI
-from app.core.config import settings
+from app.services.llm_router import complete_text
 
 async def extract_timeline_prompts(script: str, word_timestamps: list[dict]) -> list[dict]:
     """
@@ -49,8 +48,6 @@ async def extract_timeline_prompts(script: str, word_timestamps: list[dict]) -> 
     ]
     formatted_transcript = " ".join(compact_transcript)
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
     system_prompt = (
         "You are an elite AI cinematic director creating visual prompts for an AI image generator (FLUX.1). "
         "Your task is to break down the provided AUDIO TRANSCRIPT into a series of highly descriptive, striking visual prompts.\n\n"
@@ -69,8 +66,9 @@ async def extract_timeline_prompts(script: str, word_timestamps: list[dict]) -> 
     )
 
     try:
-        resp = await client.chat.completions.create(
-            model="gpt-4o",  # Using gpt-4o for better JSON reasoning on complex math/timestamps
+        resp = await complete_text(
+            capability="timeline_extraction",
+            default_openai_model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"TRANSCRIPT:\n{formatted_transcript}"}
@@ -79,7 +77,7 @@ async def extract_timeline_prompts(script: str, word_timestamps: list[dict]) -> 
             temperature=0.7,
             max_tokens=2500,
         )
-        raw = resp.choices[0].message.content
+        raw = resp.text
         data = json.loads(raw)
         
         timeline = data.get("timeline", [])

@@ -67,9 +67,10 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist, cron, social, content
+    from app.api.v1.endpoints import papers, podcast, admin, contact, waitlist, cron, social, content, fact_checker
     application.include_router(papers.router, prefix="/api/v1/papers", tags=["papers"])
     application.include_router(content.router, prefix="/api/v1/content", tags=["content"])
+    application.include_router(fact_checker.router, prefix="/api/v1/fact-check", tags=["fact-check"])
     application.include_router(podcast.router, prefix="/api/v1", tags=["podcast"])
     application.include_router(admin.router, prefix="/api/v1", tags=["admin"])
     application.include_router(contact.router, prefix="/api/v1", tags=["contact"])

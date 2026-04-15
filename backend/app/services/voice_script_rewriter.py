@@ -4,9 +4,8 @@ Rewrite narration text into a TTS-friendly documentary voiceover script.
 import json
 
 from loguru import logger
-from openai import AsyncOpenAI
 
-from app.core.config import settings
+from app.services.llm_router import complete_text
 
 
 VOICE_REWRITE_SYSTEM_PROMPT = """You rewrite science narration so it sounds exceptional when spoken aloud by an AI voice.
@@ -38,7 +37,7 @@ class VoiceScriptRewriter:
     """Rewrites narration text for more natural, documentary-style TTS."""
 
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        pass
 
     async def rewrite(self, script: str) -> str:
         script = (script or "").strip()
@@ -46,8 +45,9 @@ class VoiceScriptRewriter:
             return script
 
         try:
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+            response = await complete_text(
+                capability="voice_script_rewrite",
+                default_openai_model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": VOICE_REWRITE_SYSTEM_PROMPT},
                     {"role": "user", "content": f"Rewrite this narration for voice-over:\n\n{script}"},
@@ -56,7 +56,7 @@ class VoiceScriptRewriter:
                 temperature=0.7,
                 max_tokens=700,
             )
-            payload = json.loads(response.choices[0].message.content)
+            payload = json.loads(response.text)
             rewritten = (payload.get("rewritten_script") or "").strip()
             if rewritten:
                 return rewritten

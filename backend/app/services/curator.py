@@ -4,11 +4,10 @@ Paper Curator Service.
 Uses LLM to rank papers by podcast-worthiness and select the best ones.
 """
 from typing import List
-from openai import AsyncOpenAI
 from loguru import logger
 
-from app.core.config import settings
 from app.models.paper import Paper
+from app.services.llm_router import complete_text
 
 
 class PaperCurator:
@@ -68,7 +67,6 @@ Return ONLY a JSON array of paper IDs sorted from MOST to LEAST viral:
 No other text. Just valid JSON."""
 
     def __init__(self, model: str = "gpt-4o-mini"):
-        self.llm = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = model
     
     def _format_papers(self, papers: List[Paper]) -> str:
@@ -110,8 +108,9 @@ Abstract: {abstract}..."""
         logger.info(f"LLM ranking {len(papers)} papers for podcast selection")
         
         try:
-            response = await self.llm.chat.completions.create(
-                model=self.model,
+            response = await complete_text(
+                capability="curation",
+                default_openai_model=self.model,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": self.RANKING_TEMPLATE.format(
@@ -122,7 +121,7 @@ Abstract: {abstract}..."""
                 max_tokens=1500,  # Increased for longer responses
             )
             
-            result_text = response.choices[0].message.content.strip()
+            result_text = response.text.strip()
             logger.debug(f"Raw LLM response: {result_text[:500]}...")
             
             # Parse JSON response - handle markdown code blocks
@@ -167,4 +166,3 @@ Abstract: {abstract}..."""
         except Exception as e:
             logger.error(f"LLM ranking failed: {e}, falling back to all papers")
             return papers[:max_select]
-
