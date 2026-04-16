@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from app.services.social_fact_checker import _yt_dlp_command_prefix, _yt_dlp_shared_args
+from app.services.social_fact_checker import (
+    _parse_vtt_segments,
+    _word_timestamps_from_segments,
+    _yt_dlp_command_prefix,
+    _yt_dlp_shared_args,
+)
 
 
 def test_yt_dlp_command_uses_binary_when_available(monkeypatch):
@@ -54,3 +59,27 @@ def test_yt_dlp_shared_args_write_cookie_file_from_base64(monkeypatch, tmp_path)
     assert cookie_path.exists()
     assert "youtube.com" in cookie_path.read_text(encoding="utf-8")
     assert args[-2:] == ["--proxy", "http://proxy.internal:8080"]
+
+
+def test_parse_vtt_segments_and_word_timestamps():
+    segments = _parse_vtt_segments(
+        """WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Vitamin D may reduce inflammation.
+
+00:00:02.000 --> 00:00:04.000
+More trials are still needed.
+"""
+    )
+
+    assert segments == [
+        {"start": 0.0, "end": 2.0, "text": "Vitamin D may reduce inflammation."},
+        {"start": 2.0, "end": 4.0, "text": "More trials are still needed."},
+    ]
+
+    words = _word_timestamps_from_segments(segments)
+    assert words[0]["word"] == "Vitamin"
+    assert words[0]["start"] == 0.0
+    assert words[-1]["word"] == "needed."
+    assert words[-1]["end"] == 4.0

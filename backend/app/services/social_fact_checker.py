@@ -116,6 +116,178 @@ def _yt_dlp_shared_args(job_dir: Path) -> list[str]:
     return args
 
 
+async def _youtube_metadata(url: str, yt_dlp_cmd: list[str], yt_dlp_args: list[str]) -> dict:
+    try:
+        metadata_json = await _run_command([*yt_dlp_cmd, *yt_dlp_args, "-J", "--no-playlist", "--skip-download", url])
+        return json.loads(metadata_json)
+    except Exception as exc:
+        logger.warning(f"yt-dlp metadata lookup failed for YouTube ingest: {exc}")
+
+    try:
+        response = await httpx.AsyncClient(timeout=10.0).get(
+            "https://www.youtube.com/oembed",
+            params={"url": url, "format": "json"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return {
+            "title": payload.get("title") or "Untitled video",
+            "channel": payload.get("author_name") or "",
+            "uploader": payload.get("author_name") or "",
+            "duration": 0.0,
+        }
+    except Exception as exc:
+        logger.warning(f"YouTube oEmbed fallback failed for ingest: {exc}")
+
+    return {
+        "title": "Untitled video",
+        "channel": "",
+        "uploader": "",
+        "duration": 0.0,
+    }
+
+
+def _strip_vtt_text(value: str) -> str:
+    text = re.sub(r"<[^>]+>", "", str(value or ""))
+    text = re.sub(r"&nbsp;", " ", text)
+    text = re.sub(r"&amp;", "&", text)
+    text = re.sub(r"&lt;", "<", text)
+    text = re.sub(r"&gt;", ">", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _parse_vtt_timestamp(value: str) -> float:
+    clean = str(value or "").strip().replace(",", ".")
+    parts = clean.split(":")
+    try:
+        if len(parts) == 3:
+            hours, minutes, seconds = parts
+            return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        if len(parts) == 2:
+            minutes, seconds = parts
+            return int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return 0.0
+    return 0.0
+
+
+def _parse_vtt_segments(vtt_text: str) -> list[dict]:
+    lines = [line.rstrip("\n") for line in str(vtt_text or "").replace("\r", "").split("\n")]
+    segments: list[dict] = []
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx].strip()
+        if not line or line == "WEBVTT" or line.startswith(("Kind:", "Language:", "NOTE")):
+            idx += 1
+            continue
+        if "-->" not in line and idx + 1 < len(lines) and "-->" in lines[idx + 1]:
+            idx += 1
+            line = lines[idx].strip()
+        if "-->" not in line:
+            idx += 1
+            continue
+
+        start_text, end_text = [part.strip().split(" ", 1)[0] for part in line.split("-->", 1)]
+        idx += 1
+        cue_lines: list[str] = []
+        while idx < len(lines) and lines[idx].strip():
+            cue_lines.append(lines[idx].strip())
+            idx += 1
+
+        text = _strip_vtt_text(" ".join(cue_lines))
+        if not text:
+            continue
+        if segments and segments[-1]["text"] == text:
+            continue
+
+        segments.append(
+            {
+                "start": round(_parse_vtt_timestamp(start_text), 2),
+                "end": round(max(_parse_vtt_timestamp(end_text), _parse_vtt_timestamp(start_text)), 2),
+                "text": text,
+            }
+        )
+    return segments
+
+
+def _word_timestamps_from_segments(segments: list[dict]) -> list[dict]:
+    words: list[dict] = []
+    for segment in segments:
+        text = str(segment.get("text") or "").strip()
+        if not text:
+            continue
+        tokens = text.split()
+        if not tokens:
+            continue
+        start = float(segment.get("start") or 0.0)
+        end = max(float(segment.get("end") or start), start)
+        duration = max(end - start, 0.01)
+        step = duration / max(len(tokens), 1)
+        for index, token in enumerate(tokens):
+            token_start = start + step * index
+            token_end = start + step * (index + 1)
+            words.append(
+                {
+                    "word": token,
+                    "start": round(token_start, 2),
+                    "end": round(max(token_end, token_start + 0.01), 2),
+                }
+            )
+    return words
+
+
+async def _ingest_youtube_via_transcript(
+    *,
+    url: str,
+    job_dir: Path,
+    yt_dlp_cmd: list[str],
+    yt_dlp_args: list[str],
+) -> dict | None:
+    subtitle_template = str(job_dir / "source.%(ext)s")
+    try:
+        await _run_command([
+            *yt_dlp_cmd,
+            *yt_dlp_args,
+            "--no-playlist",
+            "--skip-download",
+            "--write-auto-sub",
+            "--write-sub",
+            "--sub-langs",
+            "en.*,en",
+            "--sub-format",
+            "vtt",
+            "-o",
+            subtitle_template,
+            url,
+        ])
+    except Exception as exc:
+        logger.warning(f"YouTube subtitle extraction failed before media download fallback: {exc}")
+        return None
+
+    subtitle_candidates = sorted(job_dir.glob("source*.vtt"))
+    if not subtitle_candidates:
+        return None
+
+    subtitle_text = subtitle_candidates[0].read_text(encoding="utf-8", errors="ignore")
+    segments = _parse_vtt_segments(subtitle_text)
+    if not segments:
+        return None
+
+    word_timestamps = _word_timestamps_from_segments(segments)
+    transcript = " ".join(segment["text"] for segment in segments).strip()
+    if not transcript or not word_timestamps:
+        return None
+
+    return {
+        "video_path": None,
+        "video_url": None,
+        "audio_path": None,
+        "audio_url": None,
+        "transcript": transcript,
+        "word_timestamps": word_timestamps,
+    }
+
+
 async def _render_with_remotion_spec(spec: dict, output_relative_path: str) -> str:
     renderer_dir = Path(
         settings.PREMIUM_REEL_RENDERER_DIR
@@ -825,12 +997,27 @@ async def ingest_youtube_video(url: str) -> dict:
 
     yt_dlp_cmd = _yt_dlp_command_prefix()
     yt_dlp_args = _yt_dlp_shared_args(job_dir)
-    metadata_json = await _run_command([*yt_dlp_cmd, *yt_dlp_args, "-J", "--no-playlist", url.strip()])
-    metadata = json.loads(metadata_json)
+    metadata = await _youtube_metadata(url.strip(), yt_dlp_cmd, yt_dlp_args)
 
     title = str(metadata.get("title") or "Untitled video").strip()
     channel = str(metadata.get("channel") or metadata.get("uploader") or "").strip()
     duration_seconds = float(metadata.get("duration") or 0.0)
+
+    transcript_payload = await _ingest_youtube_via_transcript(
+        url=url.strip(),
+        job_dir=job_dir,
+        yt_dlp_cmd=yt_dlp_cmd,
+        yt_dlp_args=yt_dlp_args,
+    )
+    if transcript_payload:
+        return {
+            "job_id": job_id,
+            "source_url": url.strip(),
+            "title": title,
+            "channel_name": channel,
+            "duration_seconds": duration_seconds,
+            **transcript_payload,
+        }
 
     video_template = str(job_dir / "source.%(ext)s")
     await _run_command([

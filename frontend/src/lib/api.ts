@@ -395,8 +395,8 @@ export interface FactCheckVideo {
     title: string;
     channel_name: string;
     duration_seconds: number;
-    video_url: string;
-    audio_url: string;
+    video_url: string | null;
+    audio_url: string | null;
     transcript: string;
     word_timestamps: WordTimestamp[];
 }

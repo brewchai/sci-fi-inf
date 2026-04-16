@@ -123,8 +123,8 @@ class IngestYoutubeResponse(BaseModel):
     title: str
     channel_name: str = ""
     duration_seconds: float = 0.0
-    video_url: str
-    audio_url: str
+    video_url: str | None = None
+    audio_url: str | None = None
     transcript: str
     word_timestamps: list[FactCheckWordTimestamp]
 
