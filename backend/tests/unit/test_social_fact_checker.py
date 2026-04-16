@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from app.services.social_fact_checker import (
+    _extract_youtube_video_id,
     _parse_vtt_segments,
+    _transcript_payload_from_snippets,
     _word_timestamps_from_segments,
     _yt_dlp_command_prefix,
     _yt_dlp_shared_args,
@@ -83,3 +85,24 @@ More trials are still needed.
     assert words[0]["start"] == 0.0
     assert words[-1]["word"] == "needed."
     assert words[-1]["end"] == 4.0
+
+
+def test_extract_youtube_video_id_variants():
+    assert _extract_youtube_video_id("https://www.youtube.com/watch?v=o9j3zzf63Ds") == "o9j3zzf63Ds"
+    assert _extract_youtube_video_id("https://youtu.be/o9j3zzf63Ds") == "o9j3zzf63Ds"
+    assert _extract_youtube_video_id("https://www.youtube.com/shorts/o9j3zzf63Ds") == "o9j3zzf63Ds"
+
+
+def test_transcript_payload_from_snippets():
+    payload = _transcript_payload_from_snippets(
+        [
+            {"text": "Vitamin D helps", "start": 0.0, "duration": 1.5},
+            {"text": "but evidence varies", "start": 1.5, "duration": 1.5},
+        ]
+    )
+
+    assert payload is not None
+    assert payload["video_url"] is None
+    assert payload["audio_url"] is None
+    assert payload["transcript"] == "Vitamin D helps but evidence varies"
+    assert payload["word_timestamps"][0]["word"] == "Vitamin"

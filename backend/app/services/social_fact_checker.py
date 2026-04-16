@@ -12,6 +12,7 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from loguru import logger
@@ -234,6 +235,86 @@ def _word_timestamps_from_segments(segments: list[dict]) -> list[dict]:
                 }
             )
     return words
+
+
+def _extract_youtube_video_id(url: str) -> str:
+    parsed = urlparse(str(url or "").strip())
+    host = (parsed.netloc or "").lower()
+    path = parsed.path or ""
+
+    if host in {"youtu.be", "www.youtu.be"}:
+        return path.strip("/").split("/", 1)[0]
+
+    if "youtube.com" in host:
+        query_video_id = parse_qs(parsed.query).get("v", [""])[0].strip()
+        if query_video_id:
+            return query_video_id
+
+        path_parts = [part for part in path.split("/") if part]
+        for prefix in ("shorts", "embed", "live", "watch"):
+            if prefix in path_parts:
+                idx = path_parts.index(prefix)
+                if idx + 1 < len(path_parts):
+                    return path_parts[idx + 1].strip()
+
+    return ""
+
+
+def _transcript_payload_from_snippets(snippets: list[dict]) -> dict | None:
+    segments: list[dict] = []
+    for item in snippets:
+        text = _strip_vtt_text(str(item.get("text") or ""))
+        if not text:
+            continue
+        start = round(float(item.get("start") or 0.0), 2)
+        duration = max(float(item.get("duration") or 0.0), 0.01)
+        end = round(start + duration, 2)
+        segments.append({"start": start, "end": end, "text": text})
+
+    if not segments:
+        return None
+
+    word_timestamps = _word_timestamps_from_segments(segments)
+    transcript = " ".join(segment["text"] for segment in segments).strip()
+    if not transcript or not word_timestamps:
+        return None
+
+    return {
+        "video_path": None,
+        "video_url": None,
+        "audio_path": None,
+        "audio_url": None,
+        "transcript": transcript,
+        "word_timestamps": word_timestamps,
+    }
+
+
+async def _ingest_youtube_via_transcript_api(url: str) -> dict | None:
+    video_id = _extract_youtube_video_id(url)
+    if not video_id:
+        return None
+
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+
+        fetched_transcript = await asyncio.to_thread(
+            lambda: YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB"])
+        )
+    except Exception as exc:
+        logger.warning(f"YouTube transcript API fetch failed before yt-dlp fallback: {exc}")
+        return None
+
+    raw_data = getattr(fetched_transcript, "to_raw_data", lambda: None)()
+    if not isinstance(raw_data, list):
+        raw_data = [
+            {
+                "text": getattr(item, "text", ""),
+                "start": getattr(item, "start", 0.0),
+                "duration": getattr(item, "duration", 0.0),
+            }
+            for item in fetched_transcript
+        ]
+    return _transcript_payload_from_snippets(raw_data)
 
 
 async def _ingest_youtube_via_transcript(
@@ -1002,6 +1083,17 @@ async def ingest_youtube_video(url: str) -> dict:
     title = str(metadata.get("title") or "Untitled video").strip()
     channel = str(metadata.get("channel") or metadata.get("uploader") or "").strip()
     duration_seconds = float(metadata.get("duration") or 0.0)
+
+    transcript_payload = await _ingest_youtube_via_transcript_api(url.strip())
+    if transcript_payload:
+        return {
+            "job_id": job_id,
+            "source_url": url.strip(),
+            "title": title,
+            "channel_name": channel,
+            "duration_seconds": duration_seconds,
+            **transcript_payload,
+        }
 
     transcript_payload = await _ingest_youtube_via_transcript(
         url=url.strip(),
