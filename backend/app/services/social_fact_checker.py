@@ -734,25 +734,13 @@ def _top_weighted_papers(papers: list[dict], *, stance: str | None = None, limit
 
 
 def _paper_blurb(paper: dict) -> str:
-    year = str(paper.get("year") or "").strip()
-    study = _study_type_label(str(paper.get("study_type") or ""))
-    population = _population_label(str(paper.get("population_type") or ""))
-    directness = _directness_label(str(paper.get("directness") or ""))
-    journal = str(paper.get("journal") or "").strip()
     evidence_note = re.sub(r"\s+", " ", str(paper.get("evidence_note") or "").strip())
-    parts = []
-    if year:
-        parts.append(year)
-    parts.append(f"{directness} {population} {study}".strip())
-    if journal:
-        parts.append(f"in {journal}")
-    blurb = " ".join(parts)
     if evidence_note:
-        return f"{blurb}: {_truncate_text(evidence_note, 140)}"
+        return _truncate_text(evidence_note, 140)
     title = re.sub(r"\s+", " ", str(paper.get("title") or "").strip())
     if title:
-        return f"{blurb}: {_truncate_text(title, 110)}"
-    return blurb
+        return _truncate_text(title, 110)
+    return "relevant evidence"
 
 
 def _format_count_bucket(papers: list[dict], *, field: str, value: str, label: str) -> str:
@@ -785,18 +773,18 @@ def _build_fact_check_summaries(
         if str(paper.get("population_type") or "") in {"animal", "cell"}
     )
 
-    stance_lead = "The evidence leans in favor of the claim."
+    stance_lead = "The evidence mostly backs the claim."
     if refute_count > support_count:
-        stance_lead = "The evidence leans against the claim."
+        stance_lead = "The evidence mostly pushes back on the claim."
     elif mixed_count >= max(support_count, refute_count):
-        stance_lead = "The evidence is mixed rather than cleanly one-sided."
+        stance_lead = "The evidence is mixed, not one-sided."
     elif support_count == refute_count and support_count > 0:
-        stance_lead = "The evidence is split."
+        stance_lead = "The evidence is pretty split."
 
     count_line = (
-        f"{trust_label} at {score:.1f}/5. {stance_lead} "
-        f"We counted {len(counted_papers)} relevant {_pluralize(len(counted_papers), 'paper')}: "
-        f"{support_count} support, {mixed_count} mixed, {refute_count} refute."
+        f"{stance_lead} That is why this lands at {score:.1f}/5. "
+        f"We found {len(counted_papers)} relevant {_pluralize(len(counted_papers), 'paper')}: "
+        f"{support_count} mostly supportive, {mixed_count} mixed, and {refute_count} against."
     )
 
     evidence_mix_parts = [
@@ -810,19 +798,19 @@ def _build_fact_check_summaries(
     ]
     evidence_mix_parts = [part for part in evidence_mix_parts if part]
     if evidence_mix_parts:
-        count_line = f"{count_line} Evidence mix: {', '.join(evidence_mix_parts[:5])}."
+        count_line = f"{count_line} The mix was {', '.join(evidence_mix_parts[:5])}."
 
     score_reason_parts: list[str] = []
     if float(score_breakdown.get("direct_human_support") or 0.0) > 0.2:
-        score_reason_parts.append("direct human evidence did most of the lifting")
+        score_reason_parts.append("the strongest signal came from direct studies in people")
     if float(score_breakdown.get("direct_human_refute") or 0.0) > 0.2:
-        score_reason_parts.append("direct human refuting evidence pulled the score down")
+        score_reason_parts.append("some direct human evidence pulled the score down")
     if float(score_breakdown.get("indirect_support") or 0.0) > 0.2 and direct_human_count == 0:
-        score_reason_parts.append("support came mostly from indirect human evidence rather than direct trials")
+        score_reason_parts.append("most of the support was indirect rather than from direct trials")
     if float(score_breakdown.get("mechanistic_support") or 0.0) > 0.12 and direct_human_count == 0:
-        score_reason_parts.append("mechanistic support was capped because it is not strong direct human evidence")
+        score_reason_parts.append("part of the support was mechanistic, so we did not score it as strongly as direct human evidence")
     if not score_reason_parts:
-        score_reason_parts.append("the score reflects a mixed evidence stack without one dominant decisive study type")
+        score_reason_parts.append("the overall picture was solid but not clean enough for a near-perfect score")
 
     top_support = _top_weighted_papers(papers, stance="supports", limit=2)
     top_refute = _top_weighted_papers(papers, stance="refutes", limit=1)
@@ -830,15 +818,15 @@ def _build_fact_check_summaries(
 
     paper_lines: list[str] = []
     if top_support:
-        paper_lines.append(f"Best support: {'; '.join(_paper_blurb(paper) for paper in top_support)}.")
+        paper_lines.append(f"What stood out most was this: {'; '.join(_paper_blurb(paper) for paper in top_support)}.")
     if top_refute:
-        paper_lines.append(f"Main pushback: {_paper_blurb(top_refute[0])}.")
+        paper_lines.append(f"The main reason for caution was: {_paper_blurb(top_refute[0])}.")
     elif top_mixed:
-        paper_lines.append(f"Biggest caveat: {_paper_blurb(top_mixed[0])}.")
+        paper_lines.append(f"The biggest caveat was: {_paper_blurb(top_mixed[0])}.")
     if direct_human_count == 0:
-        paper_lines.append("There is no strong direct human study base here, so the rating stays capped.")
+        paper_lines.append("There still is not a strong direct-in-humans evidence base here, so the score stays capped.")
 
-    rationale = f"This landed at {score:.1f}/5 because {'; '.join(score_reason_parts)}. {' '.join(paper_lines)}".strip()
+    rationale = f"We landed at {score:.1f}/5 because {'; '.join(score_reason_parts)}. {' '.join(paper_lines)}".strip()
     return count_line.strip(), rationale.strip()
 
 

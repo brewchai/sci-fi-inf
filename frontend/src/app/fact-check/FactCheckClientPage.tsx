@@ -404,7 +404,10 @@ export function FactCheckClientPage() {
                                         <div className={`${styles.trustBadge} ${styles[`trustBadge${trustTone(analysis.trust_label).charAt(0).toUpperCase()}${trustTone(analysis.trust_label).slice(1)}`]}`}>
                                             {analysis.trust_label}
                                         </div>
-                                        <div className={styles.ratingValue}>{analysis.overall_rating.toFixed(1)} / 5</div>
+                                        <div className={styles.ratingValue}>
+                                            {analysis.overall_rating.toFixed(1)}
+                                            <span className={styles.ratingDenominator}>/ 5</span>
+                                        </div>
                                     </div>
 
                                     <div className={styles.executedClaim}>

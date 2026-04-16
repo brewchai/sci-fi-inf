@@ -487,7 +487,7 @@
 .resultHeader {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     gap: 1rem;
     flex-wrap: wrap;
 }
@@ -519,8 +519,22 @@
 
 .ratingValue {
     color: var(--text-primary);
-    font-size: 1.1rem;
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.35rem;
+    font-size: clamp(2.8rem, 7vw, 5rem);
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: -0.05em;
+    text-align: right;
+    text-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.ratingDenominator {
+    font-size: 0.38em;
     font-weight: 700;
+    letter-spacing: 0;
+    opacity: 0.9;
 }
 
 .executedClaim,

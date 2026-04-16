@@ -194,9 +194,9 @@ def test_build_fact_check_summaries_emphasize_study_types_and_score_reason():
         },
     )
 
-    assert "2 support, 1 mixed, 0 refute" in verdict_summary
+    assert "2 mostly supportive, 1 mixed, and 0 against" in verdict_summary
     assert "RCT" in verdict_summary
     assert "direct human study" in verdict_summary
-    assert "This landed at 3.7/5 because" in rationale
-    assert "Nutrients" in rationale
-    assert "mechanistic" in rationale
+    assert "We landed at 3.7/5 because" in rationale
+    assert "What stood out most was this" in rationale
+    assert "The biggest caveat was" in rationale
