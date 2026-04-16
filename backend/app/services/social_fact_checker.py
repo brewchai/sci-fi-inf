@@ -6,6 +6,8 @@ import math
 import os
 import re
 import shlex
+import shutil
+import sys
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -56,6 +58,21 @@ def _job_urls(job_id: str, relative: str) -> tuple[str, str]:
     local_path.parent.mkdir(parents=True, exist_ok=True)
     static_url = f"/static/fact_checker/{job_id}/{relative.replace(os.sep, '/')}"
     return str(local_path), static_url
+
+
+def _yt_dlp_command_prefix() -> list[str]:
+    yt_dlp_binary = shutil.which("yt-dlp")
+    if yt_dlp_binary:
+        return [yt_dlp_binary]
+
+    try:
+        import yt_dlp  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "yt-dlp is not installed on the server. Add it to backend requirements for YouTube ingest."
+        ) from exc
+
+    return [sys.executable, "-m", "yt_dlp"]
 
 
 async def _render_with_remotion_spec(spec: dict, output_relative_path: str) -> str:
@@ -742,11 +759,14 @@ def _research_signal_score(*parts: str) -> int:
 
 
 async def _run_command(args: list[str]) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Required executable not found: {args[0]}") from exc
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
         message = (stderr or stdout).decode("utf-8", errors="ignore").strip()
@@ -762,7 +782,8 @@ async def ingest_youtube_video(url: str) -> dict:
     job_dir = _workspace_root() / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    metadata_json = await _run_command(["yt-dlp", "-J", "--no-playlist", url.strip()])
+    yt_dlp_cmd = _yt_dlp_command_prefix()
+    metadata_json = await _run_command([*yt_dlp_cmd, "-J", "--no-playlist", url.strip()])
     metadata = json.loads(metadata_json)
 
     title = str(metadata.get("title") or "Untitled video").strip()
@@ -771,7 +792,7 @@ async def ingest_youtube_video(url: str) -> dict:
 
     video_template = str(job_dir / "source.%(ext)s")
     await _run_command([
-        "yt-dlp",
+        *yt_dlp_cmd,
         "--no-playlist",
         "-f",
         "mp4/bestvideo*+bestaudio/best",
