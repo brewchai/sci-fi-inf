@@ -147,6 +147,10 @@ class Settings(BaseSettings):
     SITE_URL: str = "https://www.theeurekafeed.com"
     NODE_BINARY: str = "node"
     PREMIUM_REEL_RENDERER_DIR: str | None = None
+    YT_DLP_JS_RUNTIMES: str | None = "node"
+    YT_DLP_COOKIES_PATH: str | None = None
+    YT_DLP_COOKIES_B64: str | None = None
+    YT_DLP_EXTRA_ARGS: str | None = None
     
     model_config = SettingsConfigDict(
         env_file=str(__import__("pathlib").Path(__file__).resolve().parents[2] / ".env"),

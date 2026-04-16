@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import math
 import os
@@ -73,6 +74,46 @@ def _yt_dlp_command_prefix() -> list[str]:
         ) from exc
 
     return [sys.executable, "-m", "yt_dlp"]
+
+
+def _yt_dlp_cookies_path(job_dir: Path) -> str | None:
+    configured_path = str(settings.YT_DLP_COOKIES_PATH or "").strip()
+    if configured_path:
+        cookie_path = Path(configured_path)
+        if not cookie_path.exists():
+            raise RuntimeError(f"Configured YT_DLP_COOKIES_PATH does not exist: {cookie_path}")
+        return str(cookie_path)
+
+    cookies_b64 = str(settings.YT_DLP_COOKIES_B64 or "").strip()
+    if not cookies_b64:
+        return None
+
+    try:
+        cookies_text = base64.b64decode(cookies_b64).decode("utf-8")
+    except Exception as exc:
+        raise RuntimeError("YT_DLP_COOKIES_B64 is not valid base64-encoded UTF-8 cookies text") from exc
+
+    cookies_path = job_dir / "youtube-cookies.txt"
+    cookies_path.write_text(cookies_text, encoding="utf-8")
+    return str(cookies_path)
+
+
+def _yt_dlp_shared_args(job_dir: Path) -> list[str]:
+    args: list[str] = []
+
+    js_runtimes = str(settings.YT_DLP_JS_RUNTIMES or "").strip()
+    if js_runtimes:
+        args.extend(["--js-runtimes", js_runtimes])
+
+    cookies_path = _yt_dlp_cookies_path(job_dir)
+    if cookies_path:
+        args.extend(["--cookies", cookies_path])
+
+    extra_args = str(settings.YT_DLP_EXTRA_ARGS or "").strip()
+    if extra_args:
+        args.extend(shlex.split(extra_args))
+
+    return args
 
 
 async def _render_with_remotion_spec(spec: dict, output_relative_path: str) -> str:
@@ -783,7 +824,8 @@ async def ingest_youtube_video(url: str) -> dict:
     job_dir.mkdir(parents=True, exist_ok=True)
 
     yt_dlp_cmd = _yt_dlp_command_prefix()
-    metadata_json = await _run_command([*yt_dlp_cmd, "-J", "--no-playlist", url.strip()])
+    yt_dlp_args = _yt_dlp_shared_args(job_dir)
+    metadata_json = await _run_command([*yt_dlp_cmd, *yt_dlp_args, "-J", "--no-playlist", url.strip()])
     metadata = json.loads(metadata_json)
 
     title = str(metadata.get("title") or "Untitled video").strip()
@@ -793,6 +835,7 @@ async def ingest_youtube_video(url: str) -> dict:
     video_template = str(job_dir / "source.%(ext)s")
     await _run_command([
         *yt_dlp_cmd,
+        *yt_dlp_args,
         "--no-playlist",
         "-f",
         "mp4/bestvideo*+bestaudio/best",
