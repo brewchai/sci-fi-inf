@@ -213,7 +213,6 @@ export function FactCheckClientPage() {
                             </button>
                         </div>
                         <div className={styles.heroMeta}>
-                            <span>What we know is a drop, what we don't know is an ocean.</span>
                             <button type="button" className={styles.heroMetaLink} onClick={() => setIsHowItWorksOpen(true)}>
                                 How does this work?
                             </button>
