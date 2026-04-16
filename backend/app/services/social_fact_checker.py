@@ -677,6 +677,171 @@ def _build_evidence_stats(papers: list[dict]) -> dict:
     }
 
 
+def _study_type_label(study_type: str) -> str:
+    return {
+        "meta_analysis": "meta-analysis",
+        "systematic_review": "systematic review",
+        "rct": "RCT",
+        "human_trial": "human trial",
+        "cohort": "cohort study",
+        "case_control": "case-control study",
+        "cross_sectional": "cross-sectional study",
+        "observational": "observational study",
+        "review": "review",
+        "animal_experiment": "animal study",
+        "in_vitro": "cell study",
+    }.get(str(study_type or "").strip(), "study")
+
+
+def _population_label(population_type: str) -> str:
+    return {
+        "human": "human",
+        "mixed": "mixed human/preclinical",
+        "animal": "animal",
+        "cell": "cell",
+        "unclear": "unclear-population",
+    }.get(str(population_type or "").strip(), "unclear-population")
+
+
+def _directness_label(directness: str) -> str:
+    return {
+        "direct": "direct",
+        "indirect": "indirect",
+        "mechanistic": "mechanistic",
+        "tangential": "tangential",
+    }.get(str(directness or "").strip(), "unclear")
+
+
+def _pluralize(count: int, singular: str, plural: str | None = None) -> str:
+    return singular if count == 1 else (plural or f"{singular}s")
+
+
+def _top_weighted_papers(papers: list[dict], *, stance: str | None = None, limit: int = 2) -> list[dict]:
+    relevant = [
+        paper for paper in papers
+        if paper.get("counted_in_tally") and (stance is None or str(paper.get("stance") or "") == stance)
+    ]
+    return sorted(
+        relevant,
+        key=lambda paper: (
+            _compute_paper_weight(paper),
+            float(paper.get("relevance_score") or 0.0),
+            float(paper.get("retrieval_score") or 0.0),
+            int(paper.get("cited_by_count") or 0),
+        ),
+        reverse=True,
+    )[:limit]
+
+
+def _paper_blurb(paper: dict) -> str:
+    year = str(paper.get("year") or "").strip()
+    study = _study_type_label(str(paper.get("study_type") or ""))
+    population = _population_label(str(paper.get("population_type") or ""))
+    directness = _directness_label(str(paper.get("directness") or ""))
+    journal = str(paper.get("journal") or "").strip()
+    evidence_note = re.sub(r"\s+", " ", str(paper.get("evidence_note") or "").strip())
+    parts = []
+    if year:
+        parts.append(year)
+    parts.append(f"{directness} {population} {study}".strip())
+    if journal:
+        parts.append(f"in {journal}")
+    blurb = " ".join(parts)
+    if evidence_note:
+        return f"{blurb}: {_truncate_text(evidence_note, 140)}"
+    title = re.sub(r"\s+", " ", str(paper.get("title") or "").strip())
+    if title:
+        return f"{blurb}: {_truncate_text(title, 110)}"
+    return blurb
+
+
+def _format_count_bucket(papers: list[dict], *, field: str, value: str, label: str) -> str:
+    count = sum(1 for paper in papers if str(paper.get(field) or "") == value)
+    return f"{count} {label}" if count else ""
+
+
+def _build_fact_check_summaries(
+    *,
+    score: float,
+    trust_label: str,
+    papers: list[dict],
+    support_count: int,
+    mixed_count: int,
+    refute_count: int,
+    score_breakdown: dict,
+) -> tuple[str, str]:
+    counted_papers = [paper for paper in papers if paper.get("counted_in_tally")]
+    direct_human_count = sum(
+        1 for paper in counted_papers
+        if str(paper.get("population_type") or "") == "human" and str(paper.get("directness") or "") == "direct"
+    )
+    review_count = sum(
+        1 for paper in counted_papers
+        if str(paper.get("study_type") or "") in {"meta_analysis", "systematic_review"}
+    )
+    mechanistic_count = sum(1 for paper in counted_papers if str(paper.get("directness") or "") == "mechanistic")
+    animal_or_cell_count = sum(
+        1 for paper in counted_papers
+        if str(paper.get("population_type") or "") in {"animal", "cell"}
+    )
+
+    stance_lead = "The evidence leans in favor of the claim."
+    if refute_count > support_count:
+        stance_lead = "The evidence leans against the claim."
+    elif mixed_count >= max(support_count, refute_count):
+        stance_lead = "The evidence is mixed rather than cleanly one-sided."
+    elif support_count == refute_count and support_count > 0:
+        stance_lead = "The evidence is split."
+
+    count_line = (
+        f"{trust_label} at {score:.1f}/5. {stance_lead} "
+        f"We counted {len(counted_papers)} relevant {_pluralize(len(counted_papers), 'paper')}: "
+        f"{support_count} support, {mixed_count} mixed, {refute_count} refute."
+    )
+
+    evidence_mix_parts = [
+        _format_count_bucket(counted_papers, field="study_type", value="rct", label="RCT"),
+        _format_count_bucket(counted_papers, field="study_type", value="cohort", label="cohort study"),
+        _format_count_bucket(counted_papers, field="study_type", value="human_trial", label="human trial"),
+        f"{review_count} review-level {_pluralize(review_count, 'paper')}" if review_count else "",
+        f"{direct_human_count} direct human {_pluralize(direct_human_count, 'study')}" if direct_human_count else "",
+        f"{mechanistic_count} mechanistic {_pluralize(mechanistic_count, 'paper')}" if mechanistic_count else "",
+        f"{animal_or_cell_count} animal/cell {_pluralize(animal_or_cell_count, 'paper')}" if animal_or_cell_count else "",
+    ]
+    evidence_mix_parts = [part for part in evidence_mix_parts if part]
+    if evidence_mix_parts:
+        count_line = f"{count_line} Evidence mix: {', '.join(evidence_mix_parts[:5])}."
+
+    score_reason_parts: list[str] = []
+    if float(score_breakdown.get("direct_human_support") or 0.0) > 0.2:
+        score_reason_parts.append("direct human evidence did most of the lifting")
+    if float(score_breakdown.get("direct_human_refute") or 0.0) > 0.2:
+        score_reason_parts.append("direct human refuting evidence pulled the score down")
+    if float(score_breakdown.get("indirect_support") or 0.0) > 0.2 and direct_human_count == 0:
+        score_reason_parts.append("support came mostly from indirect human evidence rather than direct trials")
+    if float(score_breakdown.get("mechanistic_support") or 0.0) > 0.12 and direct_human_count == 0:
+        score_reason_parts.append("mechanistic support was capped because it is not strong direct human evidence")
+    if not score_reason_parts:
+        score_reason_parts.append("the score reflects a mixed evidence stack without one dominant decisive study type")
+
+    top_support = _top_weighted_papers(papers, stance="supports", limit=2)
+    top_refute = _top_weighted_papers(papers, stance="refutes", limit=1)
+    top_mixed = _top_weighted_papers(papers, stance="mixed", limit=1)
+
+    paper_lines: list[str] = []
+    if top_support:
+        paper_lines.append(f"Best support: {'; '.join(_paper_blurb(paper) for paper in top_support)}.")
+    if top_refute:
+        paper_lines.append(f"Main pushback: {_paper_blurb(top_refute[0])}.")
+    elif top_mixed:
+        paper_lines.append(f"Biggest caveat: {_paper_blurb(top_mixed[0])}.")
+    if direct_human_count == 0:
+        paper_lines.append("There is no strong direct human study base here, so the rating stays capped.")
+
+    rationale = f"This landed at {score:.1f}/5 because {'; '.join(score_reason_parts)}. {' '.join(paper_lines)}".strip()
+    return count_line.strip(), rationale.strip()
+
+
 def _truncate_text(value: str | None, max_chars: int) -> str:
     text = re.sub(r"\s+", " ", str(value or "").strip())
     if len(text) <= max_chars:
@@ -2115,9 +2280,13 @@ async def analyze_claim_against_papers(
                     "Use the supplied papers only. "
                     "Return strict JSON with keys: overall_rating, trust_label, verdict_summary, thirty_second_summary, papers. "
                     "overall_rating must be a number from 1 to 5. "
-                    "The verdict_summary and thirty_second_summary should highlight useful numbers when present: sample sizes, percentages, years, effect sizes, or count of papers reviewed. "
+                    "The verdict_summary and thirty_second_summary must be dense, specific, and take a stand. "
+                    "Do not waste space on generic filler like saying the evidence is qualitative unless it directly explains the score. "
+                    "Say what kinds of papers drove the result: RCTs, cohorts, reviews, animal studies, cell studies, mechanistic work, and whether the evidence is direct human evidence or weaker indirect support. "
+                    "If the score is capped because support is mostly mechanistic or preclinical, say that explicitly. "
+                    "If a refuting human paper dragged the score down, say that explicitly. "
+                    "Mention journals, years, sample sizes, percentages, effect sizes, or paper counts when present and relevant. "
                     "Do not invent numbers. Only use numbers that appear in the supplied evidence_stats or the supplied papers. "
-                    "If the evidence includes no meaningful quantitative details, explicitly say the evidence is mostly qualitative. "
                     "For each paper in papers, include title, paper_url, stance (supports|refutes|mixed|tangential), relevance_score (0 to 1), evidence_note, "
                     "study_type (meta_analysis|systematic_review|rct|human_trial|cohort|case_control|cross_sectional|observational|review|animal_experiment|in_vitro), "
                     "population_type (human|mixed|animal|cell|unclear), and directness (direct|indirect|mechanistic|tangential). "
@@ -2202,12 +2371,21 @@ async def analyze_claim_against_papers(
         claim_text=str(claim.get("claim_text") or ""),
         papers=merged_papers,
     )
+    generated_verdict_summary, generated_thirty_second_summary = _build_fact_check_summaries(
+        score=weighted_score,
+        trust_label=weighted_trust_label,
+        papers=merged_papers,
+        support_count=supports,
+        mixed_count=mixed,
+        refute_count=refutes,
+        score_breakdown=score_breakdown,
+    )
 
     return {
         "overall_rating": weighted_score,
         "trust_label": weighted_trust_label,
-        "verdict_summary": str(payload.get("verdict_summary") or "").strip(),
-        "thirty_second_summary": str(payload.get("thirty_second_summary") or "").strip(),
+        "verdict_summary": generated_verdict_summary,
+        "thirty_second_summary": generated_thirty_second_summary,
         "support_count": supports,
         "refute_count": refutes,
         "mixed_count": mixed,

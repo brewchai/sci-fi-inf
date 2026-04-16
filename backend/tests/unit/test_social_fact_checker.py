@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 
 from app.services.social_fact_checker import (
+    _build_fact_check_summaries,
     _extract_youtube_video_id,
     _ingest_youtube_via_transcript_api,
     _parse_vtt_segments,
@@ -130,3 +131,72 @@ async def test_ingest_youtube_video_refuses_media_download_for_public_flow(monke
 
     with pytest.raises(RuntimeError, match="We couldn't access a transcript for this video"):
         await ingest_youtube_video("https://www.youtube.com/watch?v=o9j3zzf63Ds", allow_media_download=False)
+
+
+def test_build_fact_check_summaries_emphasize_study_types_and_score_reason():
+    papers = [
+        {
+            "title": "Creatine supplementation improves working memory in healthy adults",
+            "journal": "Nutrients",
+            "year": 2023,
+            "stance": "supports",
+            "study_type": "rct",
+            "population_type": "human",
+            "directness": "direct",
+            "counted_in_tally": True,
+            "relevance_score": 0.88,
+            "retrieval_score": 0.81,
+            "cited_by_count": 18,
+            "evidence_note": "Randomized placebo-controlled trial in healthy adults with better short-term memory scores.",
+        },
+        {
+            "title": "Creatine and cognition in older adults",
+            "journal": "Frontiers in Aging Neuroscience",
+            "year": 2021,
+            "stance": "mixed",
+            "study_type": "cohort",
+            "population_type": "human",
+            "directness": "indirect",
+            "counted_in_tally": True,
+            "relevance_score": 0.61,
+            "retrieval_score": 0.57,
+            "cited_by_count": 12,
+            "evidence_note": "Association signal was inconsistent and not all cognitive endpoints improved.",
+        },
+        {
+            "title": "Creatine signaling pathways in mouse hippocampus",
+            "journal": "Brain Research",
+            "year": 2019,
+            "stance": "supports",
+            "study_type": "animal_experiment",
+            "population_type": "animal",
+            "directness": "mechanistic",
+            "counted_in_tally": True,
+            "relevance_score": 0.52,
+            "retrieval_score": 0.49,
+            "cited_by_count": 9,
+            "evidence_note": "Mechanistic mouse data suggests hippocampal energy effects but does not directly prove a human memory benefit.",
+        },
+    ]
+
+    verdict_summary, rationale = _build_fact_check_summaries(
+        score=3.7,
+        trust_label="Mostly supported",
+        papers=papers,
+        support_count=2,
+        mixed_count=1,
+        refute_count=0,
+        score_breakdown={
+            "direct_human_support": 0.8,
+            "direct_human_refute": 0.0,
+            "indirect_support": 0.25,
+            "mechanistic_support": 0.18,
+        },
+    )
+
+    assert "2 support, 1 mixed, 0 refute" in verdict_summary
+    assert "RCT" in verdict_summary
+    assert "direct human study" in verdict_summary
+    assert "This landed at 3.7/5 because" in rationale
+    assert "Nutrients" in rationale
+    assert "mechanistic" in rationale
