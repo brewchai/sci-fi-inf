@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Loader2, Microscope, SearchCheck, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Loader2, Microscope, SearchCheck, Sparkles, X } from 'lucide-react';
 
 import {
     analyzePublicFactCheckClaim,
@@ -69,6 +69,7 @@ export function FactCheckClientPage() {
     const [error, setError] = useState<string | null>(null);
     const [ingesting, setIngesting] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
+    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
 
     const selectedClaim = useMemo(
         () => claims.find((claim) => claim.claim_id === selectedClaimId) ?? null,
@@ -95,6 +96,21 @@ export function FactCheckClientPage() {
                 return Number(b.cited_by_count || 0) - Number(a.cited_by_count || 0);
             });
     }, [analysis]);
+
+    useEffect(() => {
+        if (!isHowItWorksOpen) {
+            return undefined;
+        }
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsHowItWorksOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [isHowItWorksOpen]);
 
     const handleSubmit = async () => {
         const nextUrl = youtubeUrl.trim();
@@ -198,9 +214,9 @@ export function FactCheckClientPage() {
                         </div>
                         <div className={styles.heroMeta}>
                             <span>What we know is a drop, what we don't know is an ocean.</span>
-                            <Link href="/fact-check/faq" className={styles.heroMetaLink}>
-                                How ratings, sources, and disclaimers work
-                            </Link>
+                            <button type="button" className={styles.heroMetaLink} onClick={() => setIsHowItWorksOpen(true)}>
+                                How does this work?
+                            </button>
                         </div>
                         {ingesting && (
                             <div className={styles.processingNote}>
@@ -209,9 +225,79 @@ export function FactCheckClientPage() {
                             </div>
                         )}
                         {error && <div className={styles.errorBanner}>{error}</div>}
+                        <div className={styles.disclaimerCard}>
+                            <div className={styles.disclaimerTitle}>Disclaimer</div>
+                            <p>
+                                This is for educational use only. We do not provide medical, supplement, treatment,
+                                nutrition, or financial recommendations, and we do not take payment to alter verdicts.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </section>
+
+            {isHowItWorksOpen && (
+                <div
+                    className={styles.modalOverlay}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="fact-check-how-it-works-title"
+                    onClick={() => setIsHowItWorksOpen(false)}
+                >
+                    <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <div>
+                                <div className={styles.panelEyebrow}>Method</div>
+                                <h2 id="fact-check-how-it-works-title">How this works</h2>
+                            </div>
+                            <button
+                                type="button"
+                                className={styles.modalClose}
+                                onClick={() => setIsHowItWorksOpen(false)}
+                                aria-label="Close how this works"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className={styles.modalGrid}>
+                            <article className={styles.modalPanel}>
+                                <h3>Best video fit</h3>
+                                <p>
+                                    This works best on YouTube Shorts with a clear, scientifically testable claim,
+                                    especially around health, nutrition, biology, medicine, behavior, or mechanism.
+                                </p>
+                            </article>
+
+                            <article className={styles.modalPanel}>
+                                <h3>How ratings work</h3>
+                                <p>
+                                    Ratings are weighted by the evidence mix. Direct human evidence counts more than
+                                    weaker indirect, animal, cell, or mechanistic support, and strong human refutation
+                                    pulls the score down harder.
+                                </p>
+                            </article>
+
+                            <article className={styles.modalPanel}>
+                                <h3>Where papers come from</h3>
+                                <p>
+                                    We fetch papers primarily through OpenAlex, score them for relevance, and only keep
+                                    fallback paper suggestions when they can be verified back against OpenAlex.
+                                </p>
+                            </article>
+
+                            <article className={styles.modalPanel}>
+                                <h3>Where LLMs help</h3>
+                                <p>
+                                    LLMs help extract claims, expand search queries, and classify paper relevance, but
+                                    the final evidence set is paper-verified and the final score is computed with a
+                                    deterministic weighting function.
+                                </p>
+                            </article>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {hasExtractionResult && (
                 <section className={styles.workspace}>

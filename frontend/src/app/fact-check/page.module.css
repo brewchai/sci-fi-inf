@@ -185,13 +185,118 @@
 }
 
 .heroMetaLink {
+    border: none;
+    padding: 0;
+    background: transparent;
     color: var(--accent);
     text-decoration: none;
     font-weight: 600;
+    font: inherit;
+    cursor: pointer;
 }
 
 .heroMetaLink:hover {
     text-decoration: underline;
+}
+
+.disclaimerCard {
+    margin-top: 1rem;
+    padding: 0.95rem 1rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    text-align: left;
+}
+
+.disclaimerCard p {
+    margin: 0;
+}
+
+.disclaimerTitle {
+    margin-bottom: 0.35rem;
+    color: var(--text-primary);
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: rgba(6, 7, 11, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.modalCard {
+    width: min(920px, 100%);
+    max-height: min(82vh, 900px);
+    overflow: auto;
+    padding: 1.35rem;
+    border-radius: 26px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(20, 21, 30, 0.97), rgba(12, 13, 20, 0.98));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+.modalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.modalHeader h2 {
+    font-size: 1.5rem;
+}
+
+.modalClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.modalClose:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.modalGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.modalPanel {
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.modalPanel h3 {
+    margin-bottom: 0.55rem;
+    font-size: 1.02rem;
+}
+
+.modalPanel p {
+    margin: 0;
+    color: var(--text-secondary);
 }
 
 .processingNote {
@@ -589,6 +694,10 @@
     }
 
     .statsRow {
+        grid-template-columns: 1fr;
+    }
+
+    .modalGrid {
         grid-template-columns: 1fr;
     }
 }
