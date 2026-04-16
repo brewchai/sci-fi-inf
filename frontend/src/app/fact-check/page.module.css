@@ -174,9 +174,24 @@
 }
 
 .heroMeta {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
     margin-top: 0.85rem;
     color: var(--text-muted);
     font-size: 0.88rem;
+}
+
+.heroMetaLink {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.heroMetaLink:hover {
+    text-decoration: underline;
 }
 
 .processingNote {

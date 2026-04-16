@@ -1,10 +1,13 @@
+import pytest
 from pathlib import Path
 
 from app.services.social_fact_checker import (
     _extract_youtube_video_id,
+    _ingest_youtube_via_transcript_api,
     _parse_vtt_segments,
     _transcript_payload_from_snippets,
     _word_timestamps_from_segments,
+    ingest_youtube_video,
     _yt_dlp_command_prefix,
     _yt_dlp_shared_args,
 )
@@ -106,3 +109,24 @@ def test_transcript_payload_from_snippets():
     assert payload["audio_url"] is None
     assert payload["transcript"] == "Vitamin D helps but evidence varies"
     assert payload["word_timestamps"][0]["word"] == "Vitamin"
+
+
+@pytest.mark.asyncio
+async def test_ingest_youtube_video_refuses_media_download_for_public_flow(monkeypatch):
+    async def fake_metadata(url, yt_dlp_cmd, yt_dlp_args):
+        return {"title": "Test title", "channel": "Test channel", "duration": 12.0}
+
+    async def fake_transcript_api(url):
+        return None
+
+    async def fake_subtitle_ingest(**kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.social_fact_checker._youtube_metadata", fake_metadata)
+    monkeypatch.setattr("app.services.social_fact_checker._ingest_youtube_via_transcript_api", fake_transcript_api)
+    monkeypatch.setattr("app.services.social_fact_checker._ingest_youtube_via_transcript", fake_subtitle_ingest)
+    monkeypatch.setattr("app.services.social_fact_checker._yt_dlp_command_prefix", lambda: ["yt-dlp"])
+    monkeypatch.setattr("app.services.social_fact_checker._yt_dlp_shared_args", lambda job_dir: [])
+
+    with pytest.raises(RuntimeError, match="We couldn't access a transcript for this video"):
+        await ingest_youtube_video("https://www.youtube.com/watch?v=o9j3zzf63Ds", allow_media_download=False)

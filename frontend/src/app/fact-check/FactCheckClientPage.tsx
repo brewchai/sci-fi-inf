@@ -197,7 +197,10 @@ export function FactCheckClientPage() {
                             </button>
                         </div>
                         <div className={styles.heroMeta}>
-                            What we know is a drop, what we don't know is an ocean.
+                            <span>What we know is a drop, what we don't know is an ocean.</span>
+                            <Link href="/fact-check/faq" className={styles.heroMetaLink}>
+                                How ratings, sources, and disclaimers work
+                            </Link>
                         </div>
                         {ingesting && (
                             <div className={styles.processingNote}>

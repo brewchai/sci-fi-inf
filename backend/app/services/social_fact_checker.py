@@ -1068,7 +1068,7 @@ async def _run_command(args: list[str]) -> str:
     return (stdout or b"").decode("utf-8", errors="ignore").strip()
 
 
-async def ingest_youtube_video(url: str) -> dict:
+async def ingest_youtube_video(url: str, *, allow_media_download: bool = True) -> dict:
     if not url.strip():
         raise ValueError("YouTube URL is required")
 
@@ -1110,6 +1110,12 @@ async def ingest_youtube_video(url: str) -> dict:
             "duration_seconds": duration_seconds,
             **transcript_payload,
         }
+
+    if not allow_media_download:
+        raise RuntimeError(
+            "We couldn't access a transcript for this video. Try a YouTube Short with captions enabled, "
+            "or use a different video with a public transcript."
+        )
 
     video_template = str(job_dir / "source.%(ext)s")
     await _run_command([

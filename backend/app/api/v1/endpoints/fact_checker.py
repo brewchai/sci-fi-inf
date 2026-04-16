@@ -293,7 +293,7 @@ async def ingest_youtube(request: IngestYoutubeRequest):
 @router.post("/public/ingest-youtube", response_model=PublicIngestYoutubeResponse)
 async def public_ingest_youtube(request: IngestYoutubeRequest):
     try:
-        payload = await ingest_youtube_video(request.url)
+        payload = await ingest_youtube_video(request.url, allow_media_download=False)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to ingest video: {exc}") from exc
 
